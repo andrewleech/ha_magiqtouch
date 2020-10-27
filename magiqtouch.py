@@ -5,6 +5,7 @@ import time
 import random
 import string
 import argparse
+import requests
 from pycognito.aws_srp import AWSSRP
 
 # Read in command-line parameters
@@ -12,12 +13,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-e", "--email", action="store", required=True, dest="email", help="Your Magiqtouch login email")
 parser.add_argument("-p", "--password", action="store", required=True, dest="password",
                     help="Your Magiqtouch login password")
-parser.add_argument("-m", "--mac", action="store", required=True, dest="mac", help="MAC address of controller")
 
 args = parser.parse_args()
 user = args.email
 password = args.password
-MACADDRESS = args.mac
 
 cognitoIdentityPoolID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
 
@@ -33,12 +32,8 @@ AWS_CLIENT_ID = "6e1lu9fchv82uefiarsp0290v9"
 AWS_POOL_NAME = "uw5VVNlib"
 STATIC_WEBSITE_ENDPOINT = "http://magiqtouch-iot-websites.s3-website-ap-southeast-2.amazonaws.com/"
 
-PUBLISH_TOPIC = "SeeleyIoT/{0}/MobileRequest".format(MACADDRESS)
-REFRESH_MESSAGE_CONTENT = "\"SerialNo\":\"{0}\",\"Status\":1"
-SUBSCRIBE_TOPIC = "SeeleyIoT/{0}/MobileRealTime".format(MACADDRESS)
-FIRMWARE_SUBSCRIBE_TOPIC = "SeeleyIoT/{0}/FirmwareUpdate"
-
-print('SUBSCRIBE_TOPIC:', SUBSCRIBE_TOPIC)
+WebServiceURL = "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
+ApiUrl="https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com" + "/api/loadmobiledevice"
 
 # # Configure debug logging
 # logger = logging.getLogger("AWSIoTPythonSDK.core")
@@ -90,6 +85,20 @@ response = iot.attach_policy(
     policyName='SeelyIoTPolicy',
     target=creds['IdentityId']
 )
+
+## Get MACADDRESS
+rsp = requests.get(ApiUrl, headers={
+    "Authorization": IdToken
+})
+MACADDRESS = rsp.json()[0]['MacAddressId']
+print('MACADDRESS:', MACADDRESS)
+
+## MQTT
+PUBLISH_TOPIC = "SeeleyIoT/{0}/MobileRequest".format(MACADDRESS)
+REFRESH_MESSAGE_CONTENT = "\"SerialNo\":\"{0}\",\"Status\":1"
+SUBSCRIBE_TOPIC = "SeeleyIoT/{0}/MobileRealTime".format(MACADDRESS)
+FIRMWARE_SUBSCRIBE_TOPIC = "SeeleyIoT/{0}/FirmwareUpdate"
+print('SUBSCRIBE_TOPIC:', SUBSCRIBE_TOPIC)
 
 ## Create random mqtt client id (copied from the official app)
 clientId = "MagIQ0" + ''.join(random.choices(string.digits, k=16))
