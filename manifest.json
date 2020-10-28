@@ -1,0 +1,19 @@
+{
+  "domain": "magiqtouch",
+  "name": "Seeley MagiQtouch",
+  "config_flow": true,
+  "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
+  "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
+  "dependencies": [],
+  "codeowners": ["andrew@alelec.net"],
+  "requirements": [
+    "boto3==1.16.7",
+    "AWSIoTPythonSDK==1.4.9",
+    "aiobotocore==1.1.2",
+    "aiohttp==3.7.2",
+    "botocore==1.19.7",
+    "structured-config==4.12",
+    "asyncio_mqtt==0.7.0",
+    "mandate==2.0.0"
+  ]
+}
