@@ -1,5 +1,5 @@
 {
-  "domain": "magiqtouch",
+  "domain": "MagiQtouch",
   "name": "Seeley MagiQtouch",
   "config_flow": true,
   "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
