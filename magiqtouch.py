@@ -275,6 +275,8 @@ class MagiQtouch_Driver:
             self.mqtt_subscribe_topic, 1, self._mqtt_response_handler
         )
 
+        self.refresh_state()
+
     def set_listener(self, listener):
         self._update_listener = listener
 
