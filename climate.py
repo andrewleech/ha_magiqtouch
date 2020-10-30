@@ -191,7 +191,7 @@ class MagiQtouch(ClimateEntity):
         return FAN_LOW
 
     def set_fan_mode(self, mode):
-        speed = FAN_SPEEDS.get(mode, None)
+        speed = dict(FAN_SPEEDS).get(mode, None)
         if speed is None:
             _LOGGER.warning("Unknown mode: %s" % mode)
 
