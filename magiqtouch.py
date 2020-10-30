@@ -369,6 +369,11 @@ class MagiQtouch_Driver:
         data.StandBy = 1
         self._send_remote_props(data)
 
+    def set_current_speed(self, speed):
+        data = self.new_remote_props()
+        data.CFanSpeed = speed
+        self._send_remote_props(data)
+
 
 def main():
     # Read in command-line parameters

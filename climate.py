@@ -44,7 +44,7 @@ from .const import (
     DOMAIN,
 )
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger("magiqtouch")
 
 # Validation of the user's configuration
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -189,6 +189,15 @@ class MagiQtouch(ClimateEntity):
             if speed <= level:
                 return mode
         return FAN_LOW
+
+    def set_fan_mode(self, mode):
+        speed = FAN_SPEEDS.get(mode, None)
+        if speed is None:
+            _LOGGER.warning("Unknown mode: %s" % mode)
+
+        else:
+            self.controller.set_current_speed(speed)
+
 
     # @property
     # def device_state_attributes(self):
