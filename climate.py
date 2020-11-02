@@ -97,6 +97,7 @@ class MagiQtouch(ClimateEntity):
         # self.controller.mqtt_connect()
 
     def _updated(self):
+        _LOGGER.warning("State Updated")
         self.schedule_update_ha_state(force_refresh=False)
 
     @property
@@ -233,12 +234,17 @@ class MagiQtouch(ClimateEntity):
     #         self.set_hvac_mode(HVAC_MODE_HEAT)
     #     self._thermostat.mode = HA_TO_EQ_PRESET[preset_mode]
 
-    def update(self):
-        """Update the data from the thermostat."""
-        try:
-            self.controller.refresh_state()
-        except Exception as ex:
-            _LOGGER.warning("Updating the state failed: %s" % ex)
+    # def update(self):
+    #     """Update the data from the thermostat."""
+    #     try:
+    #         self.controller.refresh_state()
+    #     except Exception as ex:
+    #         _LOGGER.warning("Updating the state failed: %s" % ex)
 
     async def async_update(self) -> None:
-        """Update BSBlan entity."""
+        """Update data entity."""
+        try:
+            _LOGGER.warning("Updating the state...")
+            _ = await hass.async_add_executor_job(self.controller.refresh_state)
+        except Exception as ex:
+            _LOGGER.warning("Updating the state failed: %s" % ex)

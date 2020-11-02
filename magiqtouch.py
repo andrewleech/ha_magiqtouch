@@ -341,40 +341,36 @@ class MagiQtouch_Driver:
 
         return data
 
-    def _send_remote_props(self, data):
+    def _send_remote_props(self, data=None):
+        data = data or self.new_remote_props()
         json = data.__json__(indent=0).replace("\n", "")
         self._mqtt_client.publish(self.mqtt_publish_topic, json, 1)
 
     def set_temperature(self, new_temp):
-        data = self.new_remote_props()
-        data.CTemp = new_temp
-        data.HTemp = new_temp
-        data.FAOCTemp = new_temp
-        data.IAOCSetTemp = new_temp
-        data.SetTempZone1 = new_temp
-        self._send_remote_props(data)
+        self.current_state.CTemp = new_temp
+        self.current_state.HTemp = new_temp
+        self.current_state.FAOCTemp = new_temp
+        self.current_state.IAOCSetTemp = new_temp
+        self.current_state.SetTempZone1 = new_temp
+        self._send_remote_props()
 
     def set_fan_only(self):
-        data = self.new_remote_props()
-        data.StandBy = 0
-        data.CFanOnly = 1
-        self._send_remote_props(data)
+        self.current_state.StandBy = 0
+        self.current_state.CFanOnly = 1
+        self._send_remote_props()
 
     def set_cooling(self):
-        data = self.new_remote_props()
-        data.StandBy = 0
-        data.CFanOnly = 0
-        self._send_remote_props(data)
+        self.current_state.StandBy = 0
+        self.current_state.CFanOnly = 0
+        self._send_remote_props()
 
     def set_off(self):
-        data = self.new_remote_props()
-        data.StandBy = 1
-        self._send_remote_props(data)
+        self.current_state.StandBy = 1
+        self._send_remote_props()
 
     def set_current_speed(self, speed):
-        data = self.new_remote_props()
-        data.CFanSpeed = speed
-        self._send_remote_props(data)
+        self.current_state.CFanSpeed = speed
+        self._send_remote_props()
 
 
 def main():
