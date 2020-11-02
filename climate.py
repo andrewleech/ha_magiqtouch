@@ -245,6 +245,6 @@ class MagiQtouch(ClimateEntity):
         """Update data entity."""
         try:
             _LOGGER.warning("Updating the state...")
-            _ = await hass.async_add_executor_job(self.controller.refresh_state)
+            _ = await self.hass.async_add_executor_job(self.controller.refresh_state)
         except Exception as ex:
             _LOGGER.warning("Updating the state failed: %s" % ex)
