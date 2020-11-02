@@ -311,33 +311,34 @@ class MagiQtouch_Driver:
             1,
         )
 
-    def new_remote_props(self):
+    def new_remote_props(self, state=None):
+        state = state or self.current_state
         data = RemoteAccessRequest()
-        data.SerialNo = self.current_state.MacAddressId
+        data.SerialNo = state.MacAddressId
         data.TimeRequest = datetime.now().astimezone().isoformat()
-        data.StandBy = 0 if self.current_state.SystemOn else 1
-        data.EvapCRunning = self.current_state.EvapCRunning
-        data.CTemp = self.current_state.CTemp
-        data.CFanSpeed = self.current_state.CFanSpeed
-        data.CFanOnly = self.current_state.CFanOnlyOrCool
-        data.CThermosOrFan = 0
-        data.HRunning = self.current_state.HRunning
-        data.HTemp = self.current_state.HTemp
-        data.HFanSpeed = self.current_state.HFanSpeed
-        data.HFanOnly = self.current_state.HFanOnly
-        data.FAOCRunning = self.current_state.FAOCRunning
-        data.FAOCTemp = self.current_state.FAOCTemp
-        data.IAOCRunning = self.current_state.IAOCRunning
-        data.IAOCTemp = self.current_state.IAOCSetTemp
-        data.OnOffZone1 = self.current_state.OnOffZone1
-        data.TempZone1 = self.current_state.SetTempZone1
-        data.Override1 = self.current_state.ProgramModeOverriddenZone1
+        data.StandBy = 0 if state.SystemOn else 1
+        data.EvapCRunning = state.EvapCRunning
+        data.CTemp = state.CTemp
+        data.CFanSpeed = 1
+        data.CFanOnly = state.CFanOnlyOrCool
+        data.CThermosOrFan = 0 if self.current_state.FanOrTempControl else 1
+        data.HRunning = state.HRunning
+        data.HTemp = state.HTemp
+        data.HFanSpeed = 1
+        data.HFanOnly = state.HFanOnly
+        data.FAOCRunning = state.FAOCRunning
+        data.FAOCTemp = state.FAOCTemp
+        data.IAOCRunning = state.IAOCRunning
+        data.IAOCTemp = state.IAOCSetTemp
+        data.OnOffZone1 = state.OnOffZone1
+        data.TempZone1 = state.SetTempZone1
+        data.Override1 = state.ProgramModeOverriddenZone1
 
         # Could/should do a get fw version pub/sub to have values to fill these with
-        # CC3200FW_Major = self.current_state
-        # CC3200FW_Minor = self.current_state
-        # STM32FW_Major = self.current_state
-        # STM32FW_Minor = self.current_state
+        # CC3200FW_Major = state.CC3200FW_Major
+        # CC3200FW_Minor = state.CC3200FW_Minor
+        # STM32FW_Major = state.STM32FW_Major
+        # STM32FW_Minor = state.STM32FW_Minor
 
         return data
 
@@ -355,17 +356,18 @@ class MagiQtouch_Driver:
         self._send_remote_props()
 
     def set_fan_only(self):
-        self.current_state.StandBy = 0
-        self.current_state.CFanOnly = 1
+        self.current_state.SystemOn = 1
+        self.current_state.CFanOnlyOrCool = 1
         self._send_remote_props()
 
-    def set_cooling(self):
-        self.current_state.StandBy = 0
-        self.current_state.CFanOnly = 0
+    def set_cooling(self, temp_mode):
+        self.current_state.FanOrTempControl = 0 if temp_mode else 1
+        self.current_state.SystemOn = 1
+        self.current_state.CFanOnlyOrCool = 0
         self._send_remote_props()
 
     def set_off(self):
-        self.current_state.StandBy = 1
+        self.current_state.SystemOn = 0
         self._send_remote_props()
 
     def set_current_speed(self, speed):

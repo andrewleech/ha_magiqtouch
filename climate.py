@@ -42,6 +42,8 @@ from .const import (
     # ATTR_MODEL,
     # ATTR_TARGET_TEMPERATURE,
     DOMAIN,
+    FAN_MIN,
+    FAN_MAX,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -58,7 +60,7 @@ SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESE
 
 HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_AUTO]
 
-FAN_SPEEDS = [(FAN_LOW, 2), (FAN_MEDIUM, 5), (FAN_HIGH, 10)]
+FAN_SPEEDS = [(FAN_MIN, 1), (FAN_LOW, 2), (FAN_MEDIUM, 5), (FAN_HIGH, 8), (FAN_MAX, 10)]
 
 
 # def setup_platform(hass, config, add_entities, discovery_info=None):
@@ -158,8 +160,8 @@ class MagiQtouch(ClimateEntity):
             return HVAC_MODE_FAN_ONLY
         temperature_mode = self.controller.current_state.FanOrTempControl
         if temperature_mode:
-            return HVAC_MODE_AUTO
-        return HVAC_MODE_COOL
+            return HVAC_MODE_COOL
+        return HVAC_MODE_AUTO
 
     @property
     def hvac_modes(self):
@@ -170,17 +172,22 @@ class MagiQtouch(ClimateEntity):
         """Set operation mode."""
         # if self.preset_mode:
         #     return
+        _LOGGER.info("Set hvac_mode: %s" % hvac_mode)
         if hvac_mode == HVAC_MODE_OFF:
             self.controller.set_off()
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
             self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
-            self.controller.set_cooling()
+            self.controller.set_cooling(True)
+        elif hvac_mode == HVAC_MODE_AUTO:
+            self.controller.set_cooling(False)
+        else:
+            _LOGGER.info("Unknown hvac_mode: %s" % hvac_mode)
 
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
-        return [FAN_LOW, FAN_MEDIUM, FAN_HIGH]
+        return [FAN_MIN, FAN_LOW, FAN_MEDIUM, FAN_HIGH, FAN_MAX]
 
     @property
     def fan_mode(self):
@@ -197,8 +204,8 @@ class MagiQtouch(ClimateEntity):
             _LOGGER.warning("Unknown mode: %s" % mode)
 
         else:
+            _LOGGER.warning("Set fan to: %s (%s)" % (mode, speed))
             self.controller.set_current_speed(speed)
-
 
     # @property
     # def device_state_attributes(self):
@@ -244,7 +251,6 @@ class MagiQtouch(ClimateEntity):
     async def async_update(self) -> None:
         """Update data entity."""
         try:
-            _LOGGER.warning("Updating the state...")
             _ = await self.hass.async_add_executor_job(self.controller.refresh_state)
         except Exception as ex:
             _LOGGER.warning("Updating the state failed: %s" % ex)
