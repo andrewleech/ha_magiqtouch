@@ -100,7 +100,6 @@ class MagiQtouch(ClimateEntity):
         # self.controller.mqtt_connect()
 
     def _updated(self):
-        _LOGGER.warning("State Updated")
         self.schedule_update_ha_state(force_refresh=False)
 
     @property
@@ -130,9 +129,13 @@ class MagiQtouch(ClimateEntity):
 
     @property
     def precision(self):
-        """Return eq3bt's precision 0.5."""
+        """Return unit precision as 1.0"""
         return PRECISION_WHOLE
 
+    @property
+    def target_temperature_step(self):
+        return PRECISION_WHOLE
+    
     @property
     def current_temperature(self):
         """Can not report temperature, so return target_temperature."""
@@ -155,13 +158,18 @@ class MagiQtouch(ClimateEntity):
         """Return the current operation mode."""
         on = self.controller.current_state.SystemOn
         if not on:
+            _LOGGER.debug(HVAC_MODE_OFF)
             return HVAC_MODE_OFF
         fan_only = self.controller.current_state.CFanOnlyOrCool
         if fan_only:
+            _LOGGER.debug(HVAC_MODE_FAN_ONLY)
             return HVAC_MODE_FAN_ONLY
         temperature_mode = self.controller.current_state.FanOrTempControl
         if temperature_mode:
+            _LOGGER.debug(HVAC_MODE_COOL)
             return HVAC_MODE_COOL
+        # Cooling with fan speed
+        _LOGGER.debug(HVAC_MODE_AUTO)
         return HVAC_MODE_AUTO
 
     @property
@@ -171,9 +179,7 @@ class MagiQtouch(ClimateEntity):
 
     def set_hvac_mode(self, hvac_mode):
         """Set operation mode."""
-        # if self.preset_mode:
-        #     return
-        _LOGGER.info("Set hvac_mode: %s" % hvac_mode)
+        _LOGGER.debug("Set hvac_mode: %s" % hvac_mode)
         if hvac_mode == HVAC_MODE_OFF:
             self.controller.set_off()
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
@@ -183,7 +189,7 @@ class MagiQtouch(ClimateEntity):
         elif hvac_mode == HVAC_MODE_AUTO:
             self.controller.set_cooling_by_speed()
         else:
-            _LOGGER.info("Unknown hvac_mode: %s" % hvac_mode)
+            _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
 
     @property
     def fan_modes(self):
@@ -206,7 +212,7 @@ class MagiQtouch(ClimateEntity):
             _LOGGER.warning("Unknown fan speed: %s" % mode)
 
         else:
-            _LOGGER.warning("Set fan to: %s" % mode)
+            _LOGGER.debug("Set fan to: %s" % mode)
             self.controller.set_current_speed(mode)
 
     # @property
