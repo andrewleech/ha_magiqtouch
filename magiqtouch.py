@@ -8,6 +8,7 @@ import socket
 import asyncio
 import logging
 import aiobotocore
+import threading
 from mandate import Cognito
 from datetime import datetime
 from botocore.errorfactory import BaseClientExceptions
@@ -86,10 +87,12 @@ class MagiQtouch_Driver:
 
         self.current_state: RemoteStatus = RemoteStatus()
         self._update_listener = None
+        self._update_listener_override = None
 
         self.logged_in = False
 
     async def login(self):
+        _LOGGER.info("Logging in...")
         try:
             ## First, login to cognito with MagiqTouch user/pass
             cog = Cognito(
@@ -283,13 +286,17 @@ class MagiQtouch_Driver:
     def _mqtt_response_handler(self, client, userdata, message):
         if message.topic == self.mqtt_subscribe_topic:
             try:
-                _LOGGER.debug("State updated")
                 data = json.loads(message.payload)
                 new_state = RemoteStatus()
                 new_state.__update__(data)
-                self.current_state = new_state
-                if self._update_listener:
+                if self._update_listener_override:
+                    _LOGGER.warn("State watching: %s" % new_state)
+                    self._update_listener_override()
+                    return
+                elif self._update_listener:
+                    _LOGGER.warn("State updated: %s" % new_state)
                     self._update_listener()
+                self.current_state = new_state
             except ValueError as ex:
                 _LOGGER.exception("Failed to parse current state", ex)
         else:
@@ -342,10 +349,32 @@ class MagiQtouch_Driver:
 
         return data
 
-    def _send_remote_props(self, data=None):
+    def _send_remote_props(self, data=None, checker=None):
         data = data or self.new_remote_props()
         json = data.__json__(indent=0).replace("\n", "")
-        self._mqtt_client.publish(self.mqtt_publish_topic, json, 1)
+        try:
+            update_lock = threading.Lock()
+            if checker:
+                update_lock.acquire()
+                def override_listener():
+                    if checker(self.current_state):
+                        update_lock.release()
+
+
+                self._update_listener_override = override_listener
+
+            self._mqtt_client.publish(self.mqtt_publish_topic, json, 1)
+            _LOGGER.warn("Sent: %s" % json)
+
+            if checker:
+                # Wait for expected response
+                update_lock.acquire(timeout=6)
+
+        except Exception as ex:
+            _LOGGER.exception("Failed to publish", ex)
+            raise
+        finally:
+            self._update_listener_override = None
 
     def set_temperature(self, new_temp):
         self.current_state.CTemp = new_temp
@@ -353,26 +382,36 @@ class MagiQtouch_Driver:
         self.current_state.FAOCTemp = new_temp
         self.current_state.IAOCSetTemp = new_temp
         self.current_state.SetTempZone1 = new_temp
-        self._send_remote_props()
+        checker = lambda state: state.CTemp == new_temp
+        self._send_remote_props(checker=checker)
 
     def set_fan_only(self):
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 1
-        self._send_remote_props()
+        checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1
+        self._send_remote_props(checker=checker)
 
     def set_cooling(self, temp_mode):
+        temp_mode = 1 if temp_mode else 0
         self.current_state.FanOrTempControl = 0 if temp_mode else 1
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 0
-        self._send_remote_props()
+        def checker(state):
+            return state.CFanOnlyOrCool == 0 and \
+                   state.FanOrTempControl == temp_mode and \
+                   state.SystemOn == 1
+        self._send_remote_props(checker=checker)
 
     def set_off(self):
         self.current_state.SystemOn = 0
-        self._send_remote_props()
+        checker = lambda state: state.SystemOn == 0
+        self._send_remote_props(checker=checker)
 
     def set_current_speed(self, speed):
         self.current_state.CFanSpeed = speed
-        self._send_remote_props()
+        expected = 0 if self.current_state.CFanSpeed == 0 else speed
+        checker = lambda state: state.CFanSpeed == expected
+        self._send_remote_props(checker=checker)
 
 
 def main():
