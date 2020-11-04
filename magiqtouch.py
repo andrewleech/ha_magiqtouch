@@ -326,9 +326,9 @@ class MagiQtouch_Driver:
         data.StandBy = 0 if state.SystemOn else 1
         data.EvapCRunning = state.EvapCRunning
         data.CTemp = state.CTemp
-        data.CFanSpeed = 1
+        data.CFanSpeed = state.CFanSpeed
         data.CFanOnly = state.CFanOnlyOrCool
-        data.CThermosOrFan = 0 if self.current_state.FanOrTempControl else 1
+        data.CThermosOrFan = 0 if state.CFanOnlyOrCool else state.FanOrTempControl
         data.HRunning = state.HRunning
         data.HTemp = state.HTemp
         data.HFanSpeed = 1
@@ -337,7 +337,7 @@ class MagiQtouch_Driver:
         data.FAOCTemp = state.FAOCTemp
         data.IAOCRunning = state.IAOCRunning
         data.IAOCTemp = state.IAOCSetTemp
-        data.OnOffZone1 = state.OnOffZone1
+        data.OnOffZone1 = 1
         data.TempZone1 = state.SetTempZone1
         data.Override1 = state.ProgramModeOverriddenZone1
 
@@ -376,13 +376,9 @@ class MagiQtouch_Driver:
         finally:
             self._update_listener_override = None
 
-    def set_temperature(self, new_temp):
-        self.current_state.CTemp = new_temp
-        self.current_state.HTemp = new_temp
-        self.current_state.FAOCTemp = new_temp
-        self.current_state.IAOCSetTemp = new_temp
-        self.current_state.SetTempZone1 = new_temp
-        checker = lambda state: state.CTemp == new_temp
+    def set_off(self):
+        self.current_state.SystemOn = 0
+        checker = lambda state: state.SystemOn == 0
         self._send_remote_props(checker=checker)
 
     def set_fan_only(self):
@@ -391,9 +387,15 @@ class MagiQtouch_Driver:
         checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1
         self._send_remote_props(checker=checker)
 
+    def set_cooling_by_temperature(self):
+        self.set_cooling(temp_mode=1)
+
+    def set_cooling_by_speed(self):
+        self.set_cooling(temp_mode=0)
+
     def set_cooling(self, temp_mode):
         temp_mode = 1 if temp_mode else 0
-        self.current_state.FanOrTempControl = 0 if temp_mode else 1
+        self.current_state.FanOrTempControl = temp_mode
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 0
         def checker(state):
@@ -402,15 +404,19 @@ class MagiQtouch_Driver:
                    state.SystemOn == 1
         self._send_remote_props(checker=checker)
 
-    def set_off(self):
-        self.current_state.SystemOn = 0
-        checker = lambda state: state.SystemOn == 0
-        self._send_remote_props(checker=checker)
-
     def set_current_speed(self, speed):
         self.current_state.CFanSpeed = speed
         expected = 0 if self.current_state.CFanSpeed == 0 else speed
         checker = lambda state: state.CFanSpeed == expected
+        self._send_remote_props(checker=checker)
+
+    def set_temperature(self, new_temp):
+        self.current_state.CTemp = new_temp
+        self.current_state.HTemp = new_temp
+        self.current_state.FAOCTemp = new_temp
+        self.current_state.IAOCSetTemp = new_temp
+        self.current_state.SetTempZone1 = new_temp
+        checker = lambda state: state.CTemp == new_temp
         self._send_remote_props(checker=checker)
 
 

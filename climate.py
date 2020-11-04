@@ -179,9 +179,9 @@ class MagiQtouch(ClimateEntity):
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
             self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
-            self.controller.set_cooling(True)
+            self.controller.set_cooling_by_temperature()
         elif hvac_mode == HVAC_MODE_AUTO:
-            self.controller.set_cooling(False)
+            self.controller.set_cooling_by_speed()
         else:
             _LOGGER.info("Unknown hvac_mode: %s" % hvac_mode)
 
@@ -255,4 +255,5 @@ class MagiQtouch(ClimateEntity):
         try:
             _ = await self.hass.async_add_executor_job(self.controller.refresh_state)
         except Exception as ex:
-            _LOGGER.warning("Updating the state failed: %s" % ex)
+            _LOGGER.warning("Updating the state failed: %s(%s)" % (type(ex), ex))
+            await self.controller.login()
