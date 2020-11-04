@@ -60,7 +60,8 @@ SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESE
 
 HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_AUTO]
 
-FAN_SPEEDS = [(FAN_MIN, 1), (FAN_LOW, 2), (FAN_MEDIUM, 5), (FAN_HIGH, 8), (FAN_MAX, 10)]
+FAN_SPEED_AUTO = "auto"
+FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
 
 
 # def setup_platform(hass, config, add_entities, discovery_info=None):
@@ -187,25 +188,26 @@ class MagiQtouch(ClimateEntity):
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
-        return [FAN_MIN, FAN_LOW, FAN_MEDIUM, FAN_HIGH, FAN_MAX]
+        return FAN_SPEEDS
 
     @property
     def fan_mode(self):
         """Return the current fan modes."""
-        speed = self.controller.current_state.CFanSpeed
-        for mode, level in FAN_SPEEDS:
-            if speed <= level:
-                return mode
-        return FAN_LOW
+        speed = str(self.controller.current_state.CFanSpeed)
+        if speed == "0":
+            return FAN_SPEED_AUTO
+        return speed
 
     def set_fan_mode(self, mode):
-        speed = dict(FAN_SPEEDS).get(mode, None)
-        if speed is None:
-            _LOGGER.warning("Unknown mode: %s" % mode)
+        if mode == FAN_SPEED_AUTO:
+            mode = 0
+
+        elif str(mode) not in FAN_SPEEDS:
+            _LOGGER.warning("Unknown fan speed: %s" % mode)
 
         else:
-            _LOGGER.warning("Set fan to: %s (%s)" % (mode, speed))
-            self.controller.set_current_speed(speed)
+            _LOGGER.warning("Set fan to: %s" % mode)
+            self.controller.set_current_speed(mode)
 
     # @property
     # def device_state_attributes(self):
