@@ -22,7 +22,10 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 # from pycognito.aws_srp import AWSSRP
 # import asyncio_mqtt
 
-from .structures import RemoteStatus, RemoteAccessRequest
+try:
+    from .structures import RemoteStatus, RemoteAccessRequest
+except ImportError:
+    from structures import RemoteStatus, RemoteAccessRequest
 
 cognitoIdentityPoolID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
 
@@ -426,20 +429,18 @@ def main():
     parser.add_argument(
         "-e",
         "--email",
-        action="store",
         required=True,
-        dest="email",
         help="Your Magiqtouch login email",
     )
     parser.add_argument(
         "-p",
         "--password",
-        action="store",
         required=True,
-        dest="password",
         help="Your Magiqtouch login password",
     )
 
+    import sys
+    print(sys.argv)
     args = parser.parse_args()
     user = args.email
     password = args.password

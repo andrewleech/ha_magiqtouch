@@ -1,4 +1,4 @@
-{
+{ 
   "domain": "MagiQtouch",
   "name": "Seeley MagiQtouch",
   "config_flow": true,
@@ -7,13 +7,10 @@
   "dependencies": [],
   "codeowners": ["andrew@alelec.net"],
   "requirements": [
-    "boto3==1.16.7",
     "AWSIoTPythonSDK==1.4.9",
-    "aiobotocore==1.1.2",
-    "aiohttp==3.7.2",
-    "botocore==1.19.7",
     "structured-config==4.12",
-    "asyncio_mqtt==0.7.0",
-    "mandate==2.0.0"
-  ]
+    "asyncio_mqtt==0.10.0",
+    "https://github.com/andrewleech/mandate.git"
+  ],
+  "version": "1.0"
 }

@@ -6,13 +6,17 @@ authors = ["Andrew Leech <andrew@alelec.net>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-#awsiotsdk = "^1.5.1"
 AWSIoTPythonSDK = "^1.4.9"
+structured-config = "^4.12"
+asyncio_mqtt = "^0.10.0"
+mandate = { git = "https://github.com/andrewleech/mandate.git" }
+
+#aiohttp = "^3.7.2"
+#botocore = "^1.19.7"
+#boto3 = "^1.19.7"
+#awsiotsdk = "^1.5.1"
 #pycognito = "^0.1.4"
-aiobotocore = "^1.1.2"
 #aiorequests = "^0.1.1"
-botocore = "^1.19.7"
-boto3 = "^1.16.7"
 
 [tool.poetry.dev-dependencies]
 
