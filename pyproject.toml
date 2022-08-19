@@ -5,7 +5,7 @@ description = ""
 authors = ["Andrew Leech <andrew@alelec.net>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10"
 AWSIoTPythonSDK = "^1.4.9"
 structured-config = "^4.12"
 asyncio_mqtt = "^0.10.0"
