@@ -103,6 +103,9 @@ class MagiQtouch_Driver:
                 client_id=cognito_userpool_client_id,
                 user_pool_region=AWS_REGION,
                 username=self._user,
+                # Dummy credentials
+                access_key='AKIAIOSFODNN7EXAMPLE',
+                secret_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
             )
 
             await cog.authenticate(self._password)
