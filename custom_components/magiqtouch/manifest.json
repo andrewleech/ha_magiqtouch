@@ -7,9 +7,7 @@
   "dependencies": [],
   "codeowners": ["andrew@alelec.net"],
   "requirements": [
-    "AWSIoTPythonSDK==1.4.9",
     "structured-config==4.12",
-    "asyncio_mqtt==0.10.0",
     "mandate==2.0.1"
   ],
   "version": "1.0"

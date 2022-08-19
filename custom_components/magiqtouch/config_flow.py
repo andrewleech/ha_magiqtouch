@@ -27,7 +27,9 @@ async def validate_input(hass: core.HomeAssistant, data):
     try:
         if not await hub.login():
             raise InvalidAuth
-    except Exception:
+    except Exception as e:
+        import traceback
+        _LOGGER.error(f"Could not connect: {str(e)} {traceback.format_exc()}")
         raise CannotConnect
 
     # Return info that you want to store in the config entry.

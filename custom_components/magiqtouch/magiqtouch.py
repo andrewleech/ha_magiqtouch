@@ -9,18 +9,13 @@ import asyncio
 import logging
 import aiobotocore
 import threading
+import requests
 from mandate import Cognito
 from datetime import datetime
 from botocore.errorfactory import BaseClientExceptions
 from pathlib import Path
 
 import aiohttp
-from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-
-# from AWSIoTPythonSDK.core.protocol.connection.cores import SecuredWebSocketCore
-# from AWSIoTPythonSDK.core.protocol.connection.alpn import SSLContextBuilder
-# from pycognito.aws_srp import AWSSRP
-# import asyncio_mqtt
 
 try:
     from .structures import RemoteStatus, RemoteAccessRequest
@@ -46,29 +41,15 @@ STATIC_WEBSITE_ENDPOINT = (
 WebServiceURL = "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
 ApiUrl = (
     "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com"
-    + "/api/loadmobiledevice"
+    + "/api/"
+)
+
+NewWebApiUrl = (
+    "https://tgjgb3bcf3.execute-api.ap-southeast-2.amazonaws.com/prod"
+    + "/v1/"
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
-
-# from https://docs.aws.amazon.com/iot/latest/developerguide/server-authentication.html
-rootCAPath = Path(__file__).parent / "SFSRootCAG2.pem"
-
-# # MQTT logging
-# logger = logging.getLogger("AWSIoTPythonSDK.core")
-# logger.setLevel(logging.DEBUG)
-# streamHandler = logging.StreamHandler()
-# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# streamHandler.setFormatter(formatter)
-# logger.addHandler(streamHandler)
-
-# from aiobotocore import credentials
-
-# class AioCredentialResolver(credentials.CredentialResolver):
-#     async def load_credentials(self):
-#         return None
-
-# credentials.AioCredentialResolver = AioCredentialResolver
 
 
 class MagiQtouch_Driver:
@@ -85,8 +66,6 @@ class MagiQtouch_Driver:
         self._AccessKeyId = None
         self._SecretKey = None
         self._SessionToken = None
-
-        self._mqtt_client_id = None
 
         self.current_state: RemoteStatus = RemoteStatus()
         self._update_listener = None
@@ -156,7 +135,7 @@ class MagiQtouch_Driver:
         ## Get MACADDRESS
         async with aiohttp.ClientSession() as http:
             async with http.get(
-                ApiUrl, headers={"Authorization": self._IdToken}
+                ApiUrl + "loadmobiledevice", headers={"Authorization": self._IdToken}
             ) as rsp:
                 self._mac_address = (await rsp.json())[0]["MacAddressId"]
         _LOGGER.debug("MAC:", self._mac_address)
@@ -168,161 +147,41 @@ class MagiQtouch_Driver:
         # TODO
         pass
 
-    ## MQTT
-
-    @property
-    def mqtt_publish_topic(self):
-        return "SeeleyIoT/{0}/MobileRequest".format(self._mac_address)
-
-    @property
-    def mqtt_subscribe_topic(self):
-        return "SeeleyIoT/{0}/MobileRealTime".format(self._mac_address)
-
-    @property
-    def mqtt_subscribe_fw_topic(self):
-        return "SeeleyIoT/{0}/FirmwareUpdate".format(self._mac_address)
-
-    @property
-    def mqtt_client_id(self):
-        if not self._mqtt_client_id:
-            ## Create random mqtt client id (copied from the official app)
-            self._mqtt_client_id = "MagIQ0" + "".join(
-                random.choices(string.digits, k=16)
-            )
-        return self._mqtt_client_id
-
-    async def a_mqtt_connect(self):
-        port = 443
-        c = asyncio_mqtt.Client(host, port=port, client_id=self.mqtt_client_id)
-        c._loop = asyncio.SelectorEventLoop()
-
-        from paho import mqtt
-
-        magiq = self
-
-        class WebsocketWrapper(mqtt.client.WebsocketWrapper):
-            def _do_handshake(self, extra_headers):
-                rawSSL = ssl.wrap_socket(
-                    self._socket, ca_certs=str(rootCAPath), cert_reqs=ssl.CERT_REQUIRED
-                )  # Add server certificate verification
-                rawSSL.setblocking(0)  # Non-blocking socket
-                rawSSL.do_handshake()
-                self._socket = SecuredWebSocketCore(
-                    rawSSL,
-                    self._host,
-                    self._port,
-                    magiq._AccessKeyId,
-                    magiq._SecretKey,
-                    magiq._SessionToken,
-                )  # Override the _ssl socket
-                self._ssl = True
-                # self._socket = self._ssl.getSSLSocket()
-                self.connected = True
-
-            def setblocking(self, flag):
-                return self._socket.getSSLSocket().setblocking(flag)
-
-            def setsockopt(self, *args):
-                # asyncio_mqtt tries to use this, doesn't exist for websocket
-                pass
-
-            def fileno(self):
-                return self._socket.getSSLSocket().fileno()
-
-            def _send_impl(self, data):
-                return self._socket.write(data)
-
-            def _recv_impl(self, length):
-                return self._socket.read(length)
-
-        mqtt.client.WebsocketWrapper = WebsocketWrapper
-
-        c._client._transport = "websockets"
-
-        # sock = socket.create_connection((host, port))
-        # rawSSL = ssl.wrap_socket(sock, ca_certs=rootCAPath, cert_reqs=ssl.CERT_REQUIRED)  # Add server certificate verification
-        # rawSSL.setblocking(0)  # Non-blocking socket
-        # self._ssl = SecuredWebSocketCore(rawSSL, host, port, self._AccessKeyId, self._SecretKey, self._SessionToken)  # Override the _ssl socket
-        # sock = self._ssl.getSSLSocket()
-
-        async with c as client:
-            async with client.filtered_messages(self.mqtt_subscribe_topic) as messages:
-                await client.subscribe(self.mqtt_subscribe_topic)
-                async for message in messages:
-                    print(message.payload.decode())
-
-    def mqtt_connect(self):
+    async def initial_refresh(self):
         if not self.logged_in:
             raise ValueError("Not logged in")
-        # Init AWSIoTMQTTClient
-        self._mqtt_client = AWSIoTMQTTClient(self.mqtt_client_id, useWebsocket=True)
 
-        # AWSIoTMQTTClient configuration
-        self._mqtt_client.configureEndpoint(host, 443)
-        self._mqtt_client.configureCredentials(rootCAPath)
-        self._mqtt_client.configureIAMCredentials(
-            self._AccessKeyId, self._SecretKey, self._SessionToken
-        )
-        self._mqtt_client.configureAutoReconnectBackoffTime(1, 32, 20)
-        self._mqtt_client.configureOfflinePublishQueueing(
-            -1
-        )  # Infinite offline Publish queueing
-        self._mqtt_client.configureDrainingFrequency(2)  # Draining: 2 Hz
-        self._mqtt_client.configureConnectDisconnectTimeout(20)  # 10 sec
-        self._mqtt_client.configureMQTTOperationTimeout(10)  # 5 sec
-
-        # def myOnMessageCallback(message):
-        #     print("myOnMessageCallback:", message)
-        #
-        # self._mqtt_client.onMessage = myOnMessageCallback
-
-        # Connect and subscribe to AWS IoT
-        self._mqtt_client.connect()
-        _LOGGER.debug("MQTT Connected")
-
-        self._mqtt_client.subscribe(
-            self.mqtt_subscribe_topic, 1, self._mqtt_response_handler
-        )
-
-        self.refresh_state()
+        await self.refresh_state()
 
     def set_listener(self, listener):
         self._update_listener = listener
 
-    def _mqtt_response_handler(self, client, userdata, message):
-        if message.topic == self.mqtt_subscribe_topic:
-            try:
-                data = json.loads(message.payload)
-                new_state = RemoteStatus()
-                new_state.__update__(data)
-                if self._update_listener_override:
-                    _LOGGER.warn("State watching: %s" % new_state)
-                    self._update_listener_override()
-                    return
-                elif self._update_listener:
-                    _LOGGER.warn("State updated: %s" % new_state)
-                    self._update_listener()
-                self.current_state = new_state
-            except ValueError as ex:
-                _LOGGER.exception("Failed to parse current state", ex)
-        else:
-            _LOGGER.warn("Received an unexpected message: ")
-            _LOGGER.warn(message.payload)
-            _LOGGER.warn("from topic: ")
-            _LOGGER.warn(message.topic)
-            _LOGGER.warn("--------------\n\n")
+    async def refresh_state(self):
+        async with aiohttp.ClientSession() as http:
+            await http.put(
+                NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
+                data=json.dumps(
+                    {
+                        "SerialNo": self._mac_address,
+                        "Status": 1,
+                    }
+                ),
+            )
 
-    def refresh_state(self):
-        self._mqtt_client.publish(
-            self.mqtt_publish_topic,
-            json.dumps(
-                {
-                    "SerialNo": self._mac_address,
-                    "Status": 1,
-                }
-            ),
-            1,
-        )
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+                ) as rsp:
+                    data = await rsp.json()
+                    new_state = RemoteStatus()
+                    new_state.__update__(data)
+                    if self._update_listener_override:
+                        _LOGGER.debug("State watching: %s" % new_state)
+                        self._update_listener_override()
+                    elif self._update_listener:
+                        _LOGGER.debug("State updated: %s" % new_state)
+                        self._update_listener()
+                    self.current_state = new_state
 
     def new_remote_props(self, state=None):
         state = state or self.current_state
@@ -369,7 +228,11 @@ class MagiQtouch_Driver:
 
                 self._update_listener_override = override_listener
 
-            self._mqtt_client.publish(self.mqtt_publish_topic, json, 1)
+            with requests.put(
+                NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
+                data=json,
+                ) as rsp:
+                _LOGGER.debug(f"Update response received: {rsp.json()}")
             _LOGGER.warn("Sent: %s" % json)
 
             if checker:
@@ -452,9 +315,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(m.login())
-    # loop.run_until_complete(m.a_mqtt_connect())
 
-    m.mqtt_connect()
     m.refresh_state()
 
     while not m.current_state:

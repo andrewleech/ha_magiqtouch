@@ -83,9 +83,7 @@ async def async_setup_entry(
     """Set up BSBLan device based on a config entry."""
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]
     await driver.login()
-    await hass.async_add_executor_job(
-        driver.mqtt_connect,
-    )
+    await driver.initial_refresh(),
     async_add_entities([MagiQtouch(entry.entry_id, driver)], True)
 
 
@@ -96,8 +94,6 @@ class MagiQtouch(ClimateEntity):
         """Initialize an AwesomeLight."""
         self.controller = controller
         self.controller.set_listener(self._updated)
-
-        # self.controller.mqtt_connect()
 
     def _updated(self):
         self.schedule_update_ha_state(force_refresh=False)
