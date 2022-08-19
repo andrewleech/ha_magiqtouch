@@ -118,7 +118,7 @@ class MagiQtouch_Driver:
         self._RefreshToken = cog.refresh_token
         self._IdToken = cog.id_token
 
-        session = aiobotocore.get_session()
+        session = aiobotocore.session.get_session()
         async with session.create_client(
             "cognito-identity", region_name=AWS_REGION
         ) as identity:
