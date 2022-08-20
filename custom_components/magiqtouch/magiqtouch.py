@@ -82,7 +82,7 @@ class MagiQtouch_Driver:
                 client_id=cognito_userpool_client_id,
                 user_pool_region=AWS_REGION,
                 username=self._user,
-                # Dummy credentials
+                # Dummy credentials to bypass EC2 IMDS
                 access_key='AKIAIOSFODNN7EXAMPLE',
                 secret_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
             )
@@ -102,7 +102,10 @@ class MagiQtouch_Driver:
 
         session = aiobotocore.session.get_session()
         async with session.create_client(
-            "cognito-identity", region_name=AWS_REGION
+            "cognito-identity", region_name=AWS_REGION,
+            # Dummy credentials to bypass EC2 IMDS
+            aws_secret_access_key='AKIAIOSFODNN7EXAMPLE',
+            aws_access_key_id='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
         ) as identity:
             creds = await identity.get_id(
                 IdentityPoolId=AWS_POOL_ID, Logins={AWS_PROVIDER_NAME: self._IdToken}
