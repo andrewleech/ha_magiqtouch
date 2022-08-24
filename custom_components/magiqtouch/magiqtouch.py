@@ -279,16 +279,12 @@ class MagiQtouch_Driver:
         checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1 and state.HFanOnly == 1
         self._send_remote_props(checker=checker)
 
-    def set_heating(self, temp_mode):
-        # TODO: check is temp mode necessary? Might only be for cooling.
-        temp_mode = 1 if temp_mode else 0
-        self.current_state.FanOrTempControl = temp_mode
+    def set_heating(self):
         self.current_state.SystemOn = 1
         self.current_state.HFanOnly = 0
-        self.current_state.HRunning = 1  # TODO: see whether this is necessary or not
+        self.current_state.HRunning = 1
         def checker(state):
             return state.HFanOnly == 0 and \
-                   state.FanOrTempControl == temp_mode and \
                    state.SystemOn == 1 and \
                    state.HRunning == 1
         self._send_remote_props(checker=checker)

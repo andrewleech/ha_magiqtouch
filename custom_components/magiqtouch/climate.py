@@ -227,7 +227,7 @@ class MagiQtouch(ClimateEntity):
         elif hvac_mode == HVAC_MODE_COOL:
             self.controller.set_cooling_by_temperature()
         elif hvac_mode == HVAC_MODE_HEAT:
-            self.controller.set_heating(temp_mode=1)
+            self.controller.set_heating()
         elif hvac_mode == HVAC_MODE_AUTO:
             self.controller.set_cooling_by_speed()
         else:
