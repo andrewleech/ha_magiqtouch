@@ -304,7 +304,7 @@ class MagiQtouch(ClimateEntity):
     async def async_update(self) -> None:
         """Update data entity."""
         try:
-            _ = await self.hass.async_add_executor_job(self.controller.refresh_state)
+            await self.controller.refresh_state()
         except Exception as ex:
             _LOGGER.warning("Updating the state failed: %s(%s)" % (type(ex), ex))
             await self.controller.login()
