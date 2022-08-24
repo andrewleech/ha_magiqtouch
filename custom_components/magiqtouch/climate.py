@@ -89,8 +89,9 @@ async def async_setup_entry(
     await driver.login()
     await driver.initial_refresh(),
     if driver.current_system_state.NoOfZones == 0:
-        _LOGGER.warn("The MagiQtouch API is reporting no zones. No devices will be available from the MagiQtouch integration.")
-    async_add_entities([MagiQtouch(entry.entry_id, driver, i) for i in range(driver.current_system_state.NoOfZones)], True)
+        async_add_entities([MagiQtouch(entry.entry_id, driver, 0)], True)
+    else:
+        async_add_entities([MagiQtouch(entry.entry_id, driver, i) for i in range(driver.current_system_state.NoOfZones)], True)
 
 
 class MagiQtouch(ClimateEntity):
@@ -102,7 +103,8 @@ class MagiQtouch(ClimateEntity):
         self.controller.set_listener(self._updated)
         self.zone_index = zone_index
         # Best guess: generally if this is true, this zone is a "common zone" of some kind.
-        self.controls_system = self.zone_index >= self.controller.current_system_state.NoOfZonesControl
+        self.controls_system = self.zone_index >= self.controller.current_system_state.NoOfZonesControl \
+            or self.controller.current_system_state.NoOfZones == 0
 
     def _updated(self):
         self.schedule_update_ha_state(force_refresh=False)
@@ -120,12 +122,15 @@ class MagiQtouch(ClimateEntity):
     @property
     def name(self):
         """Return the name of the device."""
-        return self.controller.get_zone_name(self.zone_index)
+        return self.controller.get_zone_name(self.zone_index) if self.controller.current_system_state.NoOfZones > 0 else "MagiQtouch"
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
-        return self.controller.current_state.MacAddressId + f"Zone{self.zone_index + 1}"
+        id = self.controller.current_state.MacAddressId
+        if self.controller.current_system_state.NoOfZones > 0:
+            id += f"Zone{self.zone_index + 1}"
+        return id
 
     @property
     def temperature_unit(self):
