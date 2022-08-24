@@ -16,6 +16,7 @@ from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.components.climate.const import (
     HVAC_MODE_FAN_ONLY,
     HVAC_MODE_AUTO,
+    HVAC_MODE_HEAT,
     HVAC_MODE_COOL,
     HVAC_MODE_OFF,
     PRESET_AWAY,
@@ -58,7 +59,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESET_MODE
 
-HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_AUTO]
+HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_HEAT, HVAC_MODE_AUTO]
 
 FAN_SPEED_AUTO = "auto"
 FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
@@ -84,16 +85,21 @@ async def async_setup_entry(
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]
     await driver.login()
     await driver.initial_refresh(),
-    async_add_entities([MagiQtouch(entry.entry_id, driver)], True)
+    if driver.current_system_state.NoOfZones == 0:
+        _LOGGER.warn("The MagiQtouch API is reporting no zones. No devices will be available from the MagiQtouch integration.")
+    async_add_entities([MagiQtouch(entry.entry_id, driver, i) for i in range(driver.current_system_state.NoOfZones)], True)
 
 
 class MagiQtouch(ClimateEntity):
     """Representation of an Awesome Light."""
 
-    def __init__(self, entry_id, controller: MagiQtouch_Driver):
+    def __init__(self, entry_id, controller: MagiQtouch_Driver, zone_index):
         """Initialize an AwesomeLight."""
         self.controller = controller
         self.controller.set_listener(self._updated)
+        self.zone_index = zone_index
+        # Best guess: generally if this is true, this zone is a "common zone" of some kind.
+        self.controls_system = self.zone_index >= self.controller.current_system_state.NoOfZonesControl
 
     def _updated(self):
         self.schedule_update_ha_state(force_refresh=False)
@@ -111,12 +117,12 @@ class MagiQtouch(ClimateEntity):
     @property
     def name(self):
         """Return the name of the device."""
-        return "MagiQtouch"
+        return self.controller.get_zone_name(self.zone_index)
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
-        return self.controller.current_state.MacAddressId
+        return self.controller.current_state.MacAddressId + f"Zone{self.zone_index + 1}"
 
     @property
     def temperature_unit(self):
@@ -142,8 +148,18 @@ class MagiQtouch(ClimateEntity):
         """Return the temperature we try to reach."""
         return self.controller.current_state.CTemp
 
+    @property
+    def max_temp(self):
+        return self.controller.get_installed_device_config().get("MaximumTemperature", 35)
+
+    @property
+    def min_temp(self):
+        device = self.controller.current_system_state.Heater
+        return self.controller.get_installed_device_config().get("MinimumTemperature", 7)
+
     def set_temperature(self, **kwargs):
         """Set new target temperature."""
+        # Heating temperature can only be changed across the entire system.
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
@@ -156,6 +172,11 @@ class MagiQtouch(ClimateEntity):
         if not on:
             _LOGGER.debug(HVAC_MODE_OFF)
             return HVAC_MODE_OFF
+        # Show as off if individual zone is off
+        zone_on = getattr(self.controller.current_state, self.controller.get_on_off_zone_name(self.zone_index))
+        if not self.controls_system and not zone_on:
+            _LOGGER.debug(HVAC_MODE_OFF)
+            return HVAC_MODE_OFF
         fan_only = self.controller.current_state.CFanOnlyOrCool
         if fan_only:
             _LOGGER.debug(HVAC_MODE_FAN_ONLY)
@@ -164,6 +185,13 @@ class MagiQtouch(ClimateEntity):
         if temperature_mode:
             _LOGGER.debug(HVAC_MODE_COOL)
             return HVAC_MODE_COOL
+        heating_running = self.controller.current_state.HRunning
+        if heating_running:
+            if self.controller.current_state.HFanOnly:
+                _LOGGER.debug(HVAC_MODE_FAN_ONLY)
+                return HVAC_MODE_FAN_ONLY
+            _LOGGER.debug(HVAC_MODE_HEAT)
+            return HVAC_MODE_HEAT
         # Cooling with fan speed
         _LOGGER.debug(HVAC_MODE_AUTO)
         return HVAC_MODE_AUTO
@@ -171,21 +199,42 @@ class MagiQtouch(ClimateEntity):
     @property
     def hvac_modes(self):
         """Return the list of available operation modes."""
-        return HVAC_MODES
+        modes = [HVAC_MODE_OFF]
+        if self.controller.current_system_state.HeaterInSystem == 1:
+            modes.append(HVAC_MODE_HEAT)
+            if self.controller.current_system_state.Heater.get("MaxSetFanSpeed", 0) > 0 and self.controls_system:
+                modes.append(HVAC_MODE_FAN_ONLY)
+            if self.controller.current_system_state.Heater.get("AOCInstalled", 0) == 1:
+                modes.append(HVAC_MODE_COOL)
+        if self.controller.current_system_state.AOCInverterInSystem == 1 \
+            or self.controller.current_system_state.AOCFixedInSystem == 1 \
+            or self.controller.current_system_state.NoOfEVAPInSystem > 0:
+            modes.append(HVAC_MODE_COOL)
+        return modes
 
     def set_hvac_mode(self, hvac_mode):
         """Set operation mode."""
+        # This one gets confusing fast - each zone can be turned on and off individually,
+        # but switching between heating vs fan mode applies only across the whole system.
         _LOGGER.debug("Set hvac_mode: %s" % hvac_mode)
         if hvac_mode == HVAC_MODE_OFF:
-            self.controller.set_off()
+            if self.controls_system:
+                self.controller.set_off()
+            else:
+                self.controller.set_zone_state(self.zone_index, False)
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
             self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
             self.controller.set_cooling_by_temperature()
+        elif hvac_mode == HVAC_MODE_HEAT:
+            self.controller.set_heating(temp_mode=1)
         elif hvac_mode == HVAC_MODE_AUTO:
             self.controller.set_cooling_by_speed()
         else:
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
+        # If we're not turning anything off, and this isn't a "whole system" zone, make sure this zone is on
+        if not self.controls_system and hvac_mode != HVAC_MODE_OFF:
+            self.controller.set_zone_state(self.zone_index, True)
 
     @property
     def fan_modes(self):

@@ -1,5 +1,8 @@
 
+from dataclasses import dataclass, field
+import inspect
 from structured_config import Structure, IntField, StrField
+from typing import Any, Dict
 
 
 class RemoteAccessRequest(Structure):
@@ -188,3 +191,36 @@ class RemoteStatus(Structure):
     ProgramModeOverriddenZone10 = 0
     SetTempZone10 = 0
     ActualTempZone10 = 0
+
+@dataclass
+class SystemDetails:
+    NoOfZones: int = 0
+    NoOfZonesControl: int = 0 # Best guess - these are the number of zones with temp control.
+    HeaterInSystem: int = 0
+    AOCInverterInSystem: int = 0
+    AOCFixedInSystem: int = 0
+    NoOfEVAPInSystem: int = 0
+    Heater: Dict[str, Any] = field(default_factory=dict)
+    AOCFixed: Dict[str, Any] = field(default_factory=dict)
+    AOCInverter: Dict[str, Any] = field(default_factory=dict)
+    EVAPCooler: Dict[str, Any] = field(default_factory=dict)
+    ZoneName1: str = ""
+    ZoneName2: str = ""
+    ZoneName3: str = ""
+    ZoneName4: str = ""
+    ZoneName5: str = ""
+    ZoneName6: str = ""
+    ZoneName7: str = ""
+    ZoneName8: str = ""
+    ZoneName9: str = ""
+    ZoneName10: str = ""
+
+    @classmethod
+    def from_dict(cls, env):      
+        """ Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964 """
+        return cls(**{
+            k: v for k, v in env.items() 
+            if k in inspect.signature(cls).parameters
+        })
+

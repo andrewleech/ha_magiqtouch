@@ -18,9 +18,9 @@ from pathlib import Path
 import aiohttp
 
 try:
-    from .structures import RemoteStatus, RemoteAccessRequest
+    from .structures import RemoteStatus, RemoteAccessRequest, SystemDetails
 except ImportError:
-    from structures import RemoteStatus, RemoteAccessRequest
+    from structures import RemoteStatus, RemoteAccessRequest, SystemDetails
 
 cognitoIdentityPoolID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
 
@@ -68,6 +68,7 @@ class MagiQtouch_Driver:
         self._SessionToken = None
 
         self.current_state: RemoteStatus = RemoteStatus()
+        self.current_system_state: SystemDetails = SystemDetails()
         self._update_listener = None
         self._update_listener_override = None
 
@@ -154,12 +155,12 @@ class MagiQtouch_Driver:
         if not self.logged_in:
             raise ValueError("Not logged in")
 
-        await self.refresh_state()
+        await self.refresh_state(initial=True)
 
     def set_listener(self, listener):
         self._update_listener = listener
 
-    async def refresh_state(self):
+    async def refresh_state(self, initial=False):
         async with aiohttp.ClientSession() as http:
             await http.put(
                 NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
@@ -170,6 +171,16 @@ class MagiQtouch_Driver:
                     }
                 ),
             )
+
+        if initial:
+            # Get system details so we can see how many zones are in use.
+            async with aiohttp.ClientSession() as http:
+                async with http.get(
+                    ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+                    ) as rsp:
+                        data = await rsp.json()
+                        new_system_state = SystemDetails.from_dict(data)
+                        self.current_system_state = new_system_state
 
         async with aiohttp.ClientSession() as http:
             async with http.get(
@@ -199,15 +210,16 @@ class MagiQtouch_Driver:
         data.CThermosOrFan = 0 if state.CFanOnlyOrCool else state.FanOrTempControl
         data.HRunning = state.HRunning
         data.HTemp = state.HTemp
-        data.HFanSpeed = 1
+        data.HFanSpeed = state.HFanSpeed
         data.HFanOnly = state.HFanOnly
         data.FAOCRunning = state.FAOCRunning
         data.FAOCTemp = state.FAOCTemp
         data.IAOCRunning = state.IAOCRunning
         data.IAOCTemp = state.IAOCSetTemp
-        data.OnOffZone1 = 1
-        data.TempZone1 = state.SetTempZone1
-        data.Override1 = state.ProgramModeOverriddenZone1
+        for zone in range(10):
+            setattr(data, f"OnOffZone{zone + 1}", getattr(state, f"OnOffZone{zone + 1}"))
+            setattr(data, f"TempZone{zone + 1}", getattr(state, f"SetTempZone{zone + 1}"))
+            setattr(data, f"Override{zone + 1}", getattr(state, f"ProgramModeOverriddenZone{zone + 1}"))
 
         # Could/should do a get fw version pub/sub to have values to fill these with
         # CC3200FW_Major = state.CC3200FW_Major
@@ -253,10 +265,32 @@ class MagiQtouch_Driver:
         checker = lambda state: state.SystemOn == 0
         self._send_remote_props(checker=checker)
 
+    def set_zone_state(self, zone_index, is_on):
+        """ Turns a specific zone on and off. """
+        on_state = 1 if is_on else 0
+        setattr(self.current_state, self.get_on_off_zone_name(zone_index), on_state)
+        checker = lambda state: getattr(state, self.get_on_off_zone_name(zone_index)) == on_state
+        self._send_remote_props(checker=checker)
+
     def set_fan_only(self):
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 1
-        checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1
+        self.current_state.HFanOnly = 1
+        checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1 and state.HFanOnly == 1
+        self._send_remote_props(checker=checker)
+
+    def set_heating(self, temp_mode):
+        # TODO: check is temp mode necessary? Might only be for cooling.
+        temp_mode = 1 if temp_mode else 0
+        self.current_state.FanOrTempControl = temp_mode
+        self.current_state.SystemOn = 1
+        self.current_state.HFanOnly = 0
+        self.current_state.HRunning = 1  # TODO: see whether this is necessary or not
+        def checker(state):
+            return state.HFanOnly == 0 and \
+                   state.FanOrTempControl == temp_mode and \
+                   state.SystemOn == 1 and \
+                   state.HRunning == 1
         self._send_remote_props(checker=checker)
 
     def set_cooling_by_temperature(self):
@@ -291,6 +325,25 @@ class MagiQtouch_Driver:
         checker = lambda state: state.CTemp == new_temp
         self._send_remote_props(checker=checker)
 
+    def get_on_off_zone_name(self, zone_index):
+        return f"OnOffZone{zone_index + 1}"
+
+    def get_zone_name(self, zone_index):
+        return getattr(self.current_system_state, f"ZoneName{zone_index + 1}")
+
+    def get_installed_device_config(self):
+        device = None
+        if self.current_system_state.HeaterInSystem:
+            device = self.current_system_state.Heater
+        elif self.current_system_state.AOCFixedInSystem:
+            device = self.current_system_state.AOCFixed
+        elif self.current_system_state.AOCInverterInSystem:
+            device = self.current_system_state.AOCInverter
+        elif self.current_system_state.NoOfEVAPInSystem > 0:
+            device = self.current_system_state.EVAPCooler
+
+        return device
+
 
 def main():
     # Read in command-line parameters
@@ -319,7 +372,7 @@ def main():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(m.login())
 
-    m.refresh_state()
+    loop.run_until_complete(m.refresh_state())
 
     while not m.current_state:
         time.sleep(1)
