@@ -1,4 +1,5 @@
 """Platform for climate integration."""
+from datetime import timedelta
 import logging
 
 from .magiqtouch import MagiQtouch_Driver
@@ -74,6 +75,8 @@ FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
 #
 #     # Add devices
 #     add_entities(MagiQtouch(username, password))
+
+SCAN_INTERVAL = timedelta(seconds=10)
 
 
 async def async_setup_entry(
