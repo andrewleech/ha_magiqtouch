@@ -207,14 +207,14 @@ class MagiQtouch(ClimateEntity):
     def hvac_modes(self):
         """Return the list of available operation modes."""
         modes = [HVAC_MODE_OFF]
-        if self.controller.current_system_state.HeaterInSystem == 1:
+        if self.controller.current_system_state.HeaterInSystem > 0:
             modes.append(HVAC_MODE_HEAT)
             if self.controller.current_system_state.Heater.get("MaxSetFanSpeed", 0) > 0 and self.controls_system:
                 modes.append(HVAC_MODE_FAN_ONLY)
-            if self.controller.current_system_state.Heater.get("AOCInstalled", 0) == 1:
+            if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
                 modes.append(HVAC_MODE_COOL)
-        if self.controller.current_system_state.AOCInverterInSystem == 1 \
-            or self.controller.current_system_state.AOCFixedInSystem == 1 \
+        if self.controller.current_system_state.AOCInverterInSystem > 0 \
+            or self.controller.current_system_state.AOCFixedInSystem > 0 \
             or self.controller.current_system_state.NoOfEVAPInSystem > 0:
             modes.append(HVAC_MODE_COOL)
         return modes
