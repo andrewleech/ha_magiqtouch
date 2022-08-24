@@ -328,7 +328,7 @@ class MagiQtouch_Driver:
         return getattr(self.current_system_state, f"ZoneName{zone_index + 1}")
 
     def get_installed_device_config(self):
-        device = None
+        device = {}
         if self.current_system_state.HeaterInSystem:
             device = self.current_system_state.Heater
         elif self.current_system_state.AOCFixedInSystem:

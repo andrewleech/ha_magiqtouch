@@ -162,7 +162,6 @@ class MagiQtouch(ClimateEntity):
 
     @property
     def min_temp(self):
-        device = self.controller.current_system_state.Heater
         return self.controller.get_installed_device_config().get("MinimumTemperature", 7)
 
     def set_temperature(self, **kwargs):
