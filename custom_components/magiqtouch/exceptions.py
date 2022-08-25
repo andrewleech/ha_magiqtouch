@@ -1,0 +1,2 @@
+class UnauthorisedTokenException(Exception):
+    pass

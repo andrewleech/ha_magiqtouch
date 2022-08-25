@@ -313,5 +313,5 @@ class MagiQtouch(ClimateEntity):
         try:
             await self.controller.refresh_state()
         except Exception as ex:
-            _LOGGER.warning("Updating the state failed: %s(%s)" % (type(ex), ex))
+            _LOGGER.warning("Updating the state failed: %s(%s). Trying login again..." % (type(ex), ex))
             await self.controller.login()

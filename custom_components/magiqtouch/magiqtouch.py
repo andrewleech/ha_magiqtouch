@@ -19,8 +19,10 @@ import aiohttp
 
 try:
     from .structures import RemoteStatus, RemoteAccessRequest, SystemDetails
+    from .exceptions import UnauthorisedTokenException
 except ImportError:
     from structures import RemoteStatus, RemoteAccessRequest, SystemDetails
+    from exceptions import UnauthorisedTokenException
 
 cognitoIdentityPoolID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
 
@@ -162,7 +164,7 @@ class MagiQtouch_Driver:
 
     async def refresh_state(self, initial=False):
         async with aiohttp.ClientSession() as http:
-            await http.put(
+            async with http.put(
                 NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
                 data=json.dumps(
                     {
@@ -170,7 +172,9 @@ class MagiQtouch_Driver:
                         "Status": 1,
                     }
                 ),
-            )
+            ) as rsp:
+                if rsp.status == 401:
+                    raise UnauthorisedTokenException
 
         if initial:
             # Get system details so we can see how many zones are in use.
@@ -178,6 +182,8 @@ class MagiQtouch_Driver:
                 async with http.get(
                     ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
                     ) as rsp:
+                        if rsp.status == 401:
+                            raise UnauthorisedTokenException
                         data = await rsp.json()
                         new_system_state = SystemDetails.from_dict(data)
                         self.current_system_state = new_system_state
@@ -186,6 +192,8 @@ class MagiQtouch_Driver:
             async with http.get(
                 ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
                 ) as rsp:
+                    if rsp.status == 401:
+                        raise UnauthorisedTokenException
                     data = await rsp.json()
                     new_state = RemoteStatus()
                     new_state.__update__(data)
