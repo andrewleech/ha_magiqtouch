@@ -29,6 +29,12 @@ from homeassistant.components.climate.const import (
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
+
+    CURRENT_HVAC_OFF,
+    CURRENT_HVAC_IDLE,
+    CURRENT_HVAC_COOL,
+    CURRENT_HVAC_FAN,
+    CURRENT_HVAC_HEAT
 )
 from homeassistant.const import (
     ATTR_TEMPERATURE,
@@ -163,6 +169,33 @@ class MagiQtouch(ClimateEntity):
     @property
     def min_temp(self):
         return self.controller.get_installed_device_config().get("MinimumTemperature", 7)
+
+    @property
+    def hvac_action(self):
+        on = self.controller.current_state.SystemOn
+        if not on:
+            _LOGGER.debug(CURRENT_HVAC_OFF)
+            return CURRENT_HVAC_OFF
+        # Show as off if individual zone is off
+        zone_on = getattr(self.controller.current_state, self.controller.get_on_off_zone_name(self.zone_index))
+        if not self.controls_system and not zone_on:
+            _LOGGER.debug(CURRENT_HVAC_OFF)
+            return CURRENT_HVAC_OFF
+
+        if self.controller.current_state.HActualGasRate > 0 \
+            and self.controller.current_state.HActualFanSpeed > 0:
+            return CURRENT_HVAC_HEAT
+        elif self.controller.current_state.FAOCActualCompressorON == 1 \
+            or self.controller.current_state.IAOCCompressorON == 1 \
+            or self.controller.current_state.EvapCRunning == 1:
+            return CURRENT_HVAC_COOL
+        elif (self.controller.current_state.HFanOnly == 1 \
+                and self.controller.current_state.HActualFanSpeed > 0 \
+                and self.controller.current_state.HFanSpeed > 0) \
+            or self.controller.current_state.CFanOnlyOrCool == 1:
+            return CURRENT_HVAC_FAN
+        else:
+            return CURRENT_HVAC_IDLE
 
     def set_temperature(self, **kwargs):
         """Set new target temperature."""
