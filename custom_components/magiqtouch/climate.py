@@ -8,11 +8,19 @@ import voluptuous as vol
 from typing import Any, Callable, Dict, List, Optional
 import homeassistant.helpers.config_validation as cv
 
+import async_timeout
+
 # Import the device class from the component that you want to support
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.typing import HomeAssistantType
+from homeassistant.core import callback
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
 from homeassistant.components.climate.const import (
     HVAC_MODE_FAN_ONLY,
@@ -93,27 +101,56 @@ async def async_setup_entry(
     """Set up BSBLan device based on a config entry."""
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]
     await driver.login()
-    await driver.initial_refresh(),
+    coordinator = MagiQtouchCoordinator(hass, driver)
+    await driver.initial_refresh()
+    await coordinator.async_config_entry_first_refresh()
     if driver.current_system_state.NoOfZones == 0:
-        async_add_entities([MagiQtouch(entry.entry_id, driver, 0)], True)
+        async_add_entities([MagiQtouch(entry.entry_id, driver, coordinator, 0)], True)
     else:
-        async_add_entities([MagiQtouch(entry.entry_id, driver, i) for i in range(driver.current_system_state.NoOfZones)], True)
+        async_add_entities([MagiQtouch(entry.entry_id, driver, coordinator, i) for i in range(driver.current_system_state.NoOfZones)], True)
 
 
-class MagiQtouch(ClimateEntity):
+class MagiQtouchCoordinator(DataUpdateCoordinator):
+    """ An update coordinator that handles updates for the entire MagiQtouch integration. """
+
+    controller: MagiQtouch_Driver
+
+    def __init__(self, hass, controller):
+        """Initialize my coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="MagiQtouch",
+            update_interval=timedelta(seconds=10),
+        )
+        self.controller = controller
+
+    async def _async_update_data(self):
+        """ Fetch data from API endpoint.
+
+        Data should be pre-processed here if possible.
+        For more info, see https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
+        """
+        try:
+            async with async_timeout.timeout(10):
+                return await self.controller.refresh_state()
+        except Exception as ex:
+            _LOGGER.warning("Updating the state failed: %s(%s)" % (type(ex), ex))
+            await self.controller.login()
+
+
+class MagiQtouch(CoordinatorEntity, ClimateEntity):
     """Representation of an Awesome Light."""
 
-    def __init__(self, entry_id, controller: MagiQtouch_Driver, zone_index):
+    def __init__(self, entry_id, controller: MagiQtouch_Driver, coordinator: MagiQtouchCoordinator, zone_index):
         """Initialize an AwesomeLight."""
+        super().__init__(coordinator)
         self.controller = controller
-        self.controller.set_listener(self._updated)
         self.zone_index = zone_index
+        self.coordinator = coordinator
         # Best guess: generally if this is true, this zone is a "common zone" of some kind.
         self.controls_system = self.zone_index >= self.controller.current_system_state.NoOfZonesControl \
             or self.controller.current_system_state.NoOfZones == 0
-
-    def _updated(self):
-        self.schedule_update_ha_state(force_refresh=False)
 
     @property
     def supported_features(self):
@@ -205,6 +242,8 @@ class MagiQtouch(ClimateEntity):
             return
         self.controller.set_temperature(temperature)
 
+        self.coordinator.async_request_refresh()
+
     @property
     def hvac_mode(self):
         """Return the current operation mode."""
@@ -276,6 +315,8 @@ class MagiQtouch(ClimateEntity):
         if not self.controls_system and hvac_mode != HVAC_MODE_OFF:
             self.controller.set_zone_state(self.zone_index, True)
 
+        self.coordinator.async_request_refresh()
+
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
@@ -299,6 +340,8 @@ class MagiQtouch(ClimateEntity):
         else:
             _LOGGER.debug("Set fan to: %s" % mode)
             self.controller.set_current_speed(mode)
+
+        self.coordinator.async_request_refresh()
 
     # @property
     # def device_state_attributes(self):
@@ -340,11 +383,3 @@ class MagiQtouch(ClimateEntity):
     #         self.controller.refresh_state()
     #     except Exception as ex:
     #         _LOGGER.warning("Updating the state failed: %s" % ex)
-
-    async def async_update(self) -> None:
-        """Update data entity."""
-        try:
-            await self.controller.refresh_state()
-        except Exception as ex:
-            _LOGGER.warning("Updating the state failed: %s(%s). Trying login again..." % (type(ex), ex))
-            await self.controller.login()
