@@ -7,8 +7,7 @@
   "dependencies": [],
   "codeowners": ["andrew@alelec.net"],
   "requirements": [
-    "structured-config==4.12",
-    "mandate==2.0.1"
+    "structured-config==4.12"
   ],
   "version": "2.0"
 }

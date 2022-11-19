@@ -1,4 +1,9 @@
 """The Seeley MagiQtouch integration."""
+import sys
+from pathlib import Path
+__vendor__ = str(Path(__file__).parent / "vendor")
+sys.path.append(__vendor__)
+
 import asyncio
 
 import voluptuous as vol
