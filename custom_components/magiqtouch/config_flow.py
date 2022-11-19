@@ -9,7 +9,14 @@ from .const import DOMAIN  # pylint:disable=unused-import
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema({"username": str, "password": str})
+CONF_USERNAME = "username"
+CONF_PASSWORD = "password"
+
+STEP_USER_DATA_SCHEMA = vol.Schema({
+    vol.Required(CONF_USERNAME): str, 
+    vol.Required(CONF_PASSWORD): str,
+})
+
 
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate the user input allows us to connect.
@@ -19,17 +26,20 @@ async def validate_input(hass: core.HomeAssistant, data):
     # If your PyPI package is not built with async, pass your methods
     # to the executor:
     # await hass.async_add_executor_job(
-    #     your_validate_func, data["username"], data["password"]
+    #     your_validate_func, data[CONF_USERNAME], data[CONF_PASSWORD]
     # )
 
-    hub = MagiQtouch_Driver(user=data["username"], password=data["password"])
+    hub = MagiQtouch_Driver(user=data[CONF_USERNAME], password=data[CONF_PASSWORD])
 
     try:
         if not await hub.login():
             raise InvalidAuth
     except Exception as e:
         import traceback
-        _LOGGER.error(f"Could not connect: {str(e)} {traceback.format_exc()}")
+        trace_text = traceback.format_exc()
+        _LOGGER.error(f"Could not connect: {str(e)} {trace_text}"	)
+        if "InvalidSignatureException" in trace_text:
+            raise InvalidTime
         raise CannotConnect
 
     # Return info that you want to store in the config entry.
@@ -57,6 +67,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "cannot_connect"
         except InvalidAuth:
             errors["base"] = "invalid_auth"
+        except InvalidTime:
+            _LOGGER.error("invalid_system_time")
+            errors["base"] = "invalid_system_time"
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
@@ -74,3 +87,6 @@ class CannotConnect(exceptions.HomeAssistantError):
 
 class InvalidAuth(exceptions.HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+class InvalidTime(exceptions.HomeAssistantError):
+    """Error to indicate auth failed due to incorrect system time."""

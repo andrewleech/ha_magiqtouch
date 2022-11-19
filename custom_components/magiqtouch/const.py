@@ -1,6 +1,6 @@
 """Constants for the Seeley MagiQtouch integration."""
 
-DOMAIN = "MagiQtouch"
+DOMAIN = "magiqtouch"
 
 FAN_MIN = 'min'
 FAN_MAX = 'max'

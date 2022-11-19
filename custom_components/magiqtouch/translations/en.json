@@ -6,15 +6,16 @@
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
+            "invalid_system_time": "Please check the clock on your HA server",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
-                    "host": "Host",
                     "password": "Password",
-                    "username": "Username"
-                }
+                    "username": "Email / User"
+                },
+                "title": "Seeley MagiQtouch login"
             }
         }
     },
