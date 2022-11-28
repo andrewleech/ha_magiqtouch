@@ -80,16 +80,7 @@ FAN_SPEED_AUTO = "auto"
 FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
 
 
-# def setup_platform(hass, config, add_entities, discovery_info=None):
-#     """Set up the MagiQtouch platform."""
-#     # Assign configuration variables.
-#     # The configuration check takes care they are present.
-#     username = config[CONF_USERNAME]
-#     password = config.get(CONF_PASSWORD)
-#
-#     # Add devices
-#     add_entities(MagiQtouch(username, password))
-
+# DataUpdateCoordinator polling rate
 SCAN_INTERVAL = timedelta(seconds=10)
 
 
@@ -121,7 +112,7 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="MagiQtouch",
-            update_interval=timedelta(seconds=10),
+            update_interval=SCAN_INTERVAL,
         )
         self.controller = controller
 
@@ -135,7 +126,7 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
             async with async_timeout.timeout(10):
                 return await self.controller.refresh_state()
         except Exception as ex:
-            _LOGGER.warning("Updating the state failed: %s(%s)" % (type(ex), ex))
+            _LOGGER.warning("Updating the state failed, will retry with login: %s(%s)" % (type(ex), ex))
             await self.controller.login()
 
 
@@ -216,21 +207,21 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         # Show as off if individual zone is off
         zone_on = getattr(self.controller.current_state, self.controller.get_on_off_zone_name(self.zone_index))
         if not self.controls_system and not zone_on:
-            _LOGGER.debug(CURRENT_HVAC_OFF)
+            _LOGGER.debug(CURRENT_HVAC_OFF + " (zone)")
             return CURRENT_HVAC_OFF
 
         if self.controller.current_state.HActualGasRate > 0 \
             and self.controller.current_state.HActualFanSpeed > 0:
             return CURRENT_HVAC_HEAT
+        elif (self.controller.current_state.HFanOnly == 1 \
+                and self.controller.current_state.HActualFanSpeed > 0 \
+                and self.controller.current_state.HFanSpeed > 0
+             ) or self.controller.current_state.CFanOnlyOrCool == 1:
+            return CURRENT_HVAC_FAN
         elif self.controller.current_state.FAOCActualCompressorON == 1 \
             or self.controller.current_state.IAOCCompressorON == 1 \
             or self.controller.current_state.EvapCRunning == 1:
             return CURRENT_HVAC_COOL
-        elif (self.controller.current_state.HFanOnly == 1 \
-                and self.controller.current_state.HActualFanSpeed > 0 \
-                and self.controller.current_state.HFanSpeed > 0) \
-            or self.controller.current_state.CFanOnlyOrCool == 1:
-            return CURRENT_HVAC_FAN
         else:
             return CURRENT_HVAC_IDLE
 
@@ -249,40 +240,38 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return the current operation mode."""
         on = self.controller.current_state.SystemOn
         if not on:
-            _LOGGER.debug(HVAC_MODE_OFF)
+            _LOGGER.debug(f"hvac_mode: {HVAC_MODE_OFF}")
             return HVAC_MODE_OFF
         # Show as off if individual zone is off
         zone_on = getattr(self.controller.current_state, self.controller.get_on_off_zone_name(self.zone_index))
         if not self.controls_system and not zone_on:
-            _LOGGER.debug(HVAC_MODE_OFF)
+            _LOGGER.debug(f"hvac_mode: (individual zone) {HVAC_MODE_OFF}")
             return HVAC_MODE_OFF
         fan_only = self.controller.current_state.CFanOnlyOrCool
         if fan_only:
-            _LOGGER.debug(HVAC_MODE_FAN_ONLY)
+            _LOGGER.debug(f"hvac_mode: (CFanOnlyOrCool) {HVAC_MODE_FAN_ONLY}")
             return HVAC_MODE_FAN_ONLY
         temperature_mode = self.controller.current_state.FanOrTempControl
         if temperature_mode:
-            _LOGGER.debug(HVAC_MODE_COOL)
+            _LOGGER.debug(f"hvac_mode: {HVAC_MODE_COOL}")
             return HVAC_MODE_COOL
         heating_running = self.controller.current_state.HRunning
         if heating_running:
             if self.controller.current_state.HFanOnly:
-                _LOGGER.debug(HVAC_MODE_FAN_ONLY)
+                _LOGGER.debug(f"hvac_mode: (HFanOnly) {HVAC_MODE_FAN_ONLY}")
                 return HVAC_MODE_FAN_ONLY
-            _LOGGER.debug(HVAC_MODE_HEAT)
+            _LOGGER.debug(f"hvac_mode: {HVAC_MODE_HEAT}")
             return HVAC_MODE_HEAT
         # Cooling with fan speed
-        _LOGGER.debug(HVAC_MODE_AUTO)
+        _LOGGER.debug(f"hvac_mode: {HVAC_MODE_AUTO}")
         return HVAC_MODE_AUTO
 
     @property
     def hvac_modes(self):
         """Return the list of available operation modes."""
-        modes = [HVAC_MODE_OFF]
+        modes = [HVAC_MODE_OFF, HVAC_MODE_FAN_ONLY]
         if self.controller.current_system_state.HeaterInSystem > 0:
             modes.append(HVAC_MODE_HEAT)
-            if self.controller.current_system_state.Heater.get("MaxSetFanSpeed", 0) > 0 and self.controls_system:
-                modes.append(HVAC_MODE_FAN_ONLY)
             if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
                 modes.append(HVAC_MODE_COOL)
         if self.controller.current_system_state.AOCInverterInSystem > 0 \
