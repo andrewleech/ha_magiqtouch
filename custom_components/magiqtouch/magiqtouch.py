@@ -1,3 +1,9 @@
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    __vendor__ = str(Path(__file__).parent / "vendor")
+    sys.path.append(__vendor__)
+
 import argparse
 import json
 import random
