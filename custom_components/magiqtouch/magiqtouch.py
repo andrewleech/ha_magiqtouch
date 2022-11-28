@@ -46,6 +46,7 @@ ApiUrl = (
     + "/api/"
 )
 
+# Sniffed from iOS app, used to replace older mqtt interface.
 NewWebApiUrl = (
     "https://tgjgb3bcf3.execute-api.ap-southeast-2.amazonaws.com/prod"
     + "/v1/"
