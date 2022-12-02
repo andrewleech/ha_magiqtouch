@@ -16,12 +16,11 @@ import logging
 import aiobotocore
 import threading
 import requests
+import aiohttp
 from mandate import Cognito
 from datetime import datetime
 from botocore.errorfactory import BaseClientExceptions
 from pathlib import Path
-
-import aiohttp
 
 try:
     from .structures import RemoteStatus, RemoteAccessRequest, SystemDetails
@@ -66,6 +65,8 @@ class MagiQtouch_Driver:
         self._password = password
         self._user = user
 
+        self._httpsession = None
+
         self._AccessToken = None
         self._RefreshToken = None
         self._IdToken = None
@@ -83,8 +84,9 @@ class MagiQtouch_Driver:
 
         self.logged_in = False
 
-    async def login(self):
+    async def login(self, httpsession=None):
         _LOGGER.info("Logging in...")
+        self._httpsession = httpsession or aiohttp.ClientSession()
         try:
             ## First, login to cognito with MagiqTouch user/pass
             cog = Cognito(
@@ -146,13 +148,12 @@ class MagiQtouch_Driver:
             )
 
         ## Get MACADDRESS
-        async with aiohttp.ClientSession() as http:
-            async with http.get(
-                ApiUrl + "loadmobiledevice", headers={"Authorization": self._IdToken}
-            ) as rsp:
-                self._mac_address = (await rsp.json())[0]["MacAddressId"]
+        async with self._httpsession.get(
+            ApiUrl + "loadmobiledevice", headers={"Authorization": self._IdToken}
+        ) as rsp:
+            self._mac_address = (await rsp.json())[0]["MacAddressId"]
         _LOGGER.debug("MAC:", self._mac_address)
-
+        
         self.logged_in = True
         return True
 
@@ -170,47 +171,44 @@ class MagiQtouch_Driver:
         self._update_listener = listener
 
     async def refresh_state(self, initial=False):
-        async with aiohttp.ClientSession() as http:
-            async with http.put(
-                NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
-                data=json.dumps(
-                    {
-                        "SerialNo": self._mac_address,
-                        "Status": 1,
-                    }
-                ),
-            ) as rsp:
-                if rsp.status == 401:
-                    raise UnauthorisedTokenException
+        async with self._httpsession.put(
+            NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
+            data=json.dumps(
+                {
+                    "SerialNo": self._mac_address,
+                    "Status": 1,
+                }
+            ),
+        ) as rsp:
+            if rsp.status == 401:
+                raise UnauthorisedTokenException
 
         if initial:
             # Get system details so we can see how many zones are in use.
-            async with aiohttp.ClientSession() as http:
-                async with http.get(
-                    ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
-                    ) as rsp:
-                        if rsp.status == 401:
-                            raise UnauthorisedTokenException
-                        data = await rsp.json()
-                        new_system_state = SystemDetails.from_dict(data)
-                        self.current_system_state = new_system_state
-
-        async with aiohttp.ClientSession() as http:
-            async with http.get(
-                ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+            async with self._httpsession.get(
+                ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
                 ) as rsp:
                     if rsp.status == 401:
                         raise UnauthorisedTokenException
                     data = await rsp.json()
-                    new_state = RemoteStatus()
-                    new_state.__update__(data)
-                    if self._update_listener_override:
-                        _LOGGER.debug("State watching: %s" % new_state)
-                        self._update_listener_override()
-                    elif self._update_listener:
-                        _LOGGER.debug("State updated: %s" % new_state)
-                        self._update_listener()
-                    self.current_state = new_state
+                    new_system_state = SystemDetails.from_dict(data)
+                    self.current_system_state = new_system_state
+
+        async with self._httpsession.get(
+            ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+            ) as rsp:
+                if rsp.status == 401:
+                    raise UnauthorisedTokenException
+                data = await rsp.json()
+                new_state = RemoteStatus()
+                new_state.__update__(data)
+                if self._update_listener_override:
+                    _LOGGER.debug("State watching: %s" % new_state)
+                    self._update_listener_override()
+                elif self._update_listener:
+                    _LOGGER.debug("State updated: %s" % new_state)
+                    self._update_listener()
+                self.current_state = new_state
 
     def new_remote_props(self, state=None):
         state = state or self.current_state
@@ -244,7 +242,7 @@ class MagiQtouch_Driver:
 
         return data
 
-    def _send_remote_props(self, data=None, checker=None):
+    async def _send_remote_props(self, data=None, checker=None):
         data = data or self.new_remote_props()
         json = data.__json__(indent=0).replace("\n", "")
         try:
@@ -258,7 +256,7 @@ class MagiQtouch_Driver:
 
                 self._update_listener_override = override_listener
 
-            with requests.put(
+            async with self._httpsession.put(
                 NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
                 data=json,
                 ) as rsp:
@@ -275,26 +273,26 @@ class MagiQtouch_Driver:
         finally:
             self._update_listener_override = None
 
-    def set_off(self):
+    async def set_off(self):
         self.current_state.SystemOn = 0
         checker = lambda state: state.SystemOn == 0
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_zone_state(self, zone_index, is_on):
+    async def set_zone_state(self, zone_index, is_on):
         """ Turns a specific zone on and off. """
         on_state = 1 if is_on else 0
         setattr(self.current_state, self.get_on_off_zone_name(zone_index), on_state)
         checker = lambda state: getattr(state, self.get_on_off_zone_name(zone_index)) == on_state
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_fan_only(self):
+    async def set_fan_only(self):
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 1
         self.current_state.HFanOnly = 1
         checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1 and state.HFanOnly == 1
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_heating(self):
+    async def set_heating(self):
         self.current_state.SystemOn = 1
         self.current_state.HFanOnly = 0
         self.current_state.HRunning = 1
@@ -302,15 +300,15 @@ class MagiQtouch_Driver:
             return state.HFanOnly == 0 and \
                    state.SystemOn == 1 and \
                    state.HRunning == 1
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_cooling_by_temperature(self):
-        self.set_cooling(temp_mode=1)
+    async def set_cooling_by_temperature(self):
+        await self.set_cooling(temp_mode=1)
 
-    def set_cooling_by_speed(self):
-        self.set_cooling(temp_mode=0)
+    async def set_cooling_by_speed(self):
+        await self.set_cooling(temp_mode=0)
 
-    def set_cooling(self, temp_mode):
+    async def set_cooling(self, temp_mode):
         temp_mode = 1 if temp_mode else 0
         self.current_state.FanOrTempControl = temp_mode
         self.current_state.SystemOn = 1
@@ -319,22 +317,22 @@ class MagiQtouch_Driver:
             return state.CFanOnlyOrCool == 0 and \
                    state.FanOrTempControl == temp_mode and \
                    state.SystemOn == 1
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_current_speed(self, speed):
+    async def set_current_speed(self, speed):
         self.current_state.CFanSpeed = speed
         expected = 0 if self.current_state.CFanSpeed == 0 else speed
         checker = lambda state: state.CFanSpeed == expected
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
-    def set_temperature(self, new_temp):
+    async def set_temperature(self, new_temp):
         self.current_state.CTemp = new_temp
         self.current_state.HTemp = new_temp
         self.current_state.FAOCTemp = new_temp
         self.current_state.IAOCSetTemp = new_temp
         self.current_state.SetTempZone1 = new_temp
         checker = lambda state: state.CTemp == new_temp
-        self._send_remote_props(checker=checker)
+        await self._send_remote_props(checker=checker)
 
     def get_on_off_zone_name(self, zone_index):
         return f"OnOffZone{zone_index + 1}"

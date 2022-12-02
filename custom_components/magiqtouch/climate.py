@@ -16,6 +16,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.core import callback
+from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -91,7 +92,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up BSBLan device based on a config entry."""
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]
-    await driver.login()
+    httpsession = aiohttp_client.async_get_clientsession(hass)
+
+    await driver.login(httpsession)
     coordinator = MagiQtouchCoordinator(hass, driver)
     await driver.initial_refresh()
     await coordinator.async_config_entry_first_refresh()
@@ -225,15 +228,15 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         else:
             return CURRENT_HVAC_IDLE
 
-    def set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
         # Heating temperature can only be changed across the entire system.
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        self.controller.set_temperature(temperature)
+        await self.controller.set_temperature(temperature)
 
-        self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh()
 
     @property
     def hvac_mode(self):
@@ -280,31 +283,31 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             modes.append(HVAC_MODE_COOL)
         return modes
 
-    def set_hvac_mode(self, hvac_mode):
+    async def async_set_hvac_mode(self, hvac_mode):
         """Set operation mode."""
         # This one gets confusing fast - each zone can be turned on and off individually,
         # but switching between heating vs fan mode applies only across the whole system.
         _LOGGER.debug("Set hvac_mode: %s" % hvac_mode)
         if hvac_mode == HVAC_MODE_OFF:
             if self.controls_system:
-                self.controller.set_off()
+                await self.controller.set_off()
             else:
-                self.controller.set_zone_state(self.zone_index, False)
+                await self.controller.set_zone_state(self.zone_index, False)
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
-            self.controller.set_fan_only()
+            await self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
-            self.controller.set_cooling_by_temperature()
+            await self.controller.set_cooling_by_temperature()
         elif hvac_mode == HVAC_MODE_HEAT:
-            self.controller.set_heating()
+            await self.controller.set_heating()
         elif hvac_mode == HVAC_MODE_AUTO:
-            self.controller.set_cooling_by_speed()
+            await self.controller.set_cooling_by_speed()
         else:
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
         # If we're not turning anything off, and this isn't a "whole system" zone, make sure this zone is on
         if not self.controls_system and hvac_mode != HVAC_MODE_OFF:
-            self.controller.set_zone_state(self.zone_index, True)
+            await self.controller.set_zone_state(self.zone_index, True)
 
-        self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh()
 
     @property
     def fan_modes(self):
@@ -319,18 +322,18 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             return FAN_SPEED_AUTO
         return speed
 
-    def set_fan_mode(self, mode):
-        if mode == FAN_SPEED_AUTO:
-            mode = 0
+    async def async_set_fan_mode(self, fan_mode):
+        if fan_mode == FAN_SPEED_AUTO:
+            fan_mode = 0
 
-        elif str(mode) not in FAN_SPEEDS:
-            _LOGGER.warning("Unknown fan speed: %s" % mode)
+        elif str(fan_mode) not in FAN_SPEEDS:
+            _LOGGER.warning("Unknown fan speed: %s" % fan_mode)
 
         else:
-            _LOGGER.debug("Set fan to: %s" % mode)
-            self.controller.set_current_speed(mode)
+            _LOGGER.debug("Set fan to: %s" % fan_mode)
+            await self.controller.set_current_speed(fan_mode)
 
-        self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh()
 
     # @property
     # def device_state_attributes(self):
