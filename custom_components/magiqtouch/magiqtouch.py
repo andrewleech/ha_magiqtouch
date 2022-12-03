@@ -249,27 +249,31 @@ class MagiQtouch_Driver:
         await self._send_remote_props(checker=checker)
 
     async def set_cooling_by_temperature(self):
-        await self.set_cooling(temp_mode=1)
+        self.current_state.FanOrTempControl = 1
+        await self.set_cooling()
 
     async def set_cooling_by_speed(self):
-        await self.set_cooling(temp_mode=0)
+        self.current_state.FanOrTempControl = 0
+        await self.set_cooling()
 
-    async def set_cooling(self, temp_mode):
-        temp_mode = 1 if temp_mode else 0
-        self.current_state.FanOrTempControl = temp_mode
+    async def set_cooling(self):
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 0
         def checker(state):
             return state.CFanOnlyOrCool == 0 and \
-                   state.FanOrTempControl == temp_mode and \
                    state.SystemOn == 1
         await self._send_remote_props(checker=checker)
 
     async def set_current_speed(self, speed):
-        self.current_state.CFanSpeed = speed
-        expected = 0 if self.current_state.CFanSpeed == 0 else speed
-        checker = lambda state: state.CFanSpeed == expected
-        await self._send_remote_props(checker=checker)
+        if speed == 0:
+            # Control to temperature, not fan speed
+            self.current_state.FanOrTempControl = 1
+            checker = lambda state: state.FanOrTempControl == 0
+            await self._send_remote_props(checker=checker)
+        else:
+            self.current_state.CFanSpeed = speed
+            checker = lambda state: state.CFanSpeed == speed
+            await self._send_remote_props(checker=checker)
 
     async def set_temperature(self, new_temp):
         self.current_state.CTemp = new_temp

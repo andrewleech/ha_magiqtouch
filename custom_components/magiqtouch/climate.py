@@ -77,7 +77,7 @@ SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESE
 
 HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_HEAT, HVAC_MODE_AUTO]
 
-FAN_SPEED_AUTO = "auto"
+FAN_SPEED_AUTO = "Temperature"
 FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
 
 
@@ -344,14 +344,13 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         return speed
 
     async def async_set_fan_mode(self, fan_mode):
-        if fan_mode == FAN_SPEED_AUTO:
-            fan_mode = 0
-
-        elif str(fan_mode) not in FAN_SPEEDS:
+        if str(fan_mode) not in FAN_SPEEDS:
             _LOGGER.warning("Unknown fan speed: %s" % fan_mode)
 
         else:
             _LOGGER.debug("Set fan to: %s" % fan_mode)
+            if fan_mode == FAN_SPEED_AUTO:
+                fan_mode = 0
             await self.controller.set_current_speed(fan_mode)
 
         await self.coordinator.async_request_refresh()
@@ -396,3 +395,4 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     #         self.controller.refresh_state()
     #     except Exception as ex:
     #         _LOGGER.warning("Updating the state failed: %s" % ex)
+
