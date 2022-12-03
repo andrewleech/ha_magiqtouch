@@ -6,21 +6,14 @@ if __name__ == "__main__":
 
 import argparse
 import json
-import random
-import string
 import time
-import ssl
-import socket
 import asyncio
 import logging
-import aiobotocore
 import threading
-import requests
 import aiohttp
 from pprint import pp
 from mandate import Cognito
 from datetime import datetime
-from botocore.errorfactory import BaseClientExceptions
 from pathlib import Path
 
 try:
@@ -30,26 +23,13 @@ except ImportError:
     from structures import RemoteStatus, RemoteAccessRequest, SystemDetails
     from exceptions import UnauthorisedTokenException
 
-cognitoIdentityPoolID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
-
-host = "ab7hzia9uew8g-ats.iot.ap-southeast-2.amazonaws.com"
 
 AWS_REGION = "ap-southeast-2"
 AWS_USER_POOL_ID = "ap-southeast-2_uw5VVNlib"
-AWS_POOL_ID = "ap-southeast-2:0ed20c23-4af8-4408-86fc-b78689a5c7a7"
-AWS_PROVIDER_NAME = "cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_uw5VVNlib"
-appId = "4e662b6273004a6c9a0797efae6fbb73"
 cognito_userpool_client_id = "6e1lu9fchv82uefiarsp0290v9"
-AWS_CLIENT_ID = "6e1lu9fchv82uefiarsp0290v9"
-AWS_POOL_NAME = "uw5VVNlib"
-STATIC_WEBSITE_ENDPOINT = (
-    "http://magiqtouch-iot-websites.s3-website-ap-southeast-2.amazonaws.com/"
-)
 
-WebServiceURL = "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
 ApiUrl = (
-    "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com"
-    + "/api/"
+    "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
 )
 
 # Sniffed from iOS app, used to replace older mqtt interface.
@@ -112,41 +92,6 @@ class MagiQtouch_Driver:
         self._AccessToken = cog.access_token
         self._RefreshToken = cog.refresh_token
         self._IdToken = cog.id_token
-
-        session = aiobotocore.session.get_session()
-        async with session.create_client(
-            "cognito-identity", region_name=AWS_REGION,
-            # Dummy credentials to bypass EC2 IMDS
-            aws_secret_access_key='AKIAIOSFODNN7EXAMPLE',
-            aws_access_key_id='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-        ) as identity:
-            creds = await identity.get_id(
-                IdentityPoolId=AWS_POOL_ID, Logins={AWS_PROVIDER_NAME: self._IdToken}
-            )
-            self._IdentityId = creds["IdentityId"]
-
-            ident = await identity.get_credentials_for_identity(
-                IdentityId=self._IdentityId, Logins={AWS_PROVIDER_NAME: self._IdToken}
-            )
-
-            self._AccessKeyId = ident["Credentials"]["AccessKeyId"]
-            self._SecretKey = ident["Credentials"]["SecretKey"]
-            self._SessionToken = ident["Credentials"]["SessionToken"]
-
-            _LOGGER.debug("Login Expiration:", ident["Credentials"]["Expiration"])
-
-        ## Enable custom policy for user (copied from official app)
-        credentials = dict(
-            aws_access_key_id=self._AccessKeyId,
-            aws_secret_access_key=self._SecretKey,
-            aws_session_token=self._SessionToken,
-        )
-        async with session.create_client(
-            "iot", region_name=AWS_REGION, **credentials
-        ) as iot:
-            _ = await iot.attach_policy(
-                policyName="SeelyIoTPolicy", target=self._IdentityId
-            )
 
         ## Get MACADDRESS
         async with self._httpsession.get(
