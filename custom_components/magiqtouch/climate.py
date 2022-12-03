@@ -272,7 +272,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.debug(f"hvac_mode: (CFanOnlyOrCool) {HVAC_MODE_FAN_ONLY}")
             return HVAC_MODE_FAN_ONLY
         temperature_mode = self.controller.current_state.FanOrTempControl
-        if temperature_mode:
+        evap_cooling_mode = self.controller.current_state.PumpStatus
+        if evap_cooling_mode:
             _LOGGER.debug(f"hvac_mode: {HVAC_MODE_COOL}")
             return HVAC_MODE_COOL
         heating_running = self.controller.current_state.HRunning
@@ -334,6 +335,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def fan_mode(self):
         """Return the current fan modes."""
+        if self.controller.current_state.FanOrTempControl == 1:
+             # running in temperature set point mode
+             return FAN_SPEED_AUTO
         speed = str(self.controller.current_state.CFanSpeed)
         if speed == "0":
             return FAN_SPEED_AUTO
