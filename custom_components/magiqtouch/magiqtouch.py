@@ -17,6 +17,7 @@ import aiobotocore
 import threading
 import requests
 import aiohttp
+from pprint import pp
 from mandate import Cognito
 from datetime import datetime
 from botocore.errorfactory import BaseClientExceptions
@@ -385,7 +386,7 @@ def main():
 
     while not m.current_state:
         time.sleep(1)
-    print(m.current_state)
+    pp(m.current_state.__as_dict__())
 
 
 if __name__ == "__main__":
