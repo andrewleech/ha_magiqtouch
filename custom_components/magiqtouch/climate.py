@@ -82,7 +82,7 @@ FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
 
 
 # DataUpdateCoordinator polling rate
-SCAN_INTERVAL = timedelta(seconds=10)
+SCAN_INTERVAL = timedelta(seconds=30)
 
 
 async def async_setup_entry(
@@ -118,20 +118,37 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
             update_interval=SCAN_INTERVAL,
         )
         self.controller = controller
+        self.fast_update = 0
 
+    def start_fast_updates(self):
+        """ fetch data at high polling rate for 8 second
+        """
+        _LOGGER.debug("start fast update")
+        self.fast_update = 16
+        self.update_interval = timedelta(milliseconds=500)
+    
+    async def async_request_refresh(self):
+        self.start_fast_updates()
+        return await super().async_request_refresh()
+    
     async def _async_update_data(self):
         """ Fetch data from API endpoint.
 
         Data should be pre-processed here if possible.
         For more info, see https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
         """
+        if self.fast_update:
+            _LOGGER.debug("fast refresh")
+            self.fast_update -= 1
+            if not self.fast_update:
+                self.update_interval = SCAN_INTERVAL
+
         try:
             async with async_timeout.timeout(10):
                 return await self.controller.refresh_state()
         except Exception as ex:
             _LOGGER.warning("Updating the state failed, will retry with login: %s(%s)" % (type(ex), ex))
             await self.controller.login()
-
 
 class MagiQtouch(CoordinatorEntity, ClimateEntity):
     """Representation of an Awesome Light."""
