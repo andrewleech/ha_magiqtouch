@@ -70,7 +70,7 @@ class MagiQtouch_Driver:
         self._httpsession = httpsession or aiohttp.ClientSession()
         try:
             ## First, login to cognito with MagiqTouch user/pass
-            cog = Cognito(
+            self._cognito = Cognito(
                 user_pool_id=AWS_USER_POOL_ID,
                 client_id=cognito_userpool_client_id,
                 user_pool_region=AWS_REGION,
@@ -80,7 +80,7 @@ class MagiQtouch_Driver:
                 secret_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
             )
 
-            await cog.authenticate(self._password)
+            await self._cognito.authenticate(self._password)
         except Exception as ex:
             if "UserNotFoundException" in str(ex) or "NotAuthorizedException" in str(
                 ex
@@ -89,13 +89,14 @@ class MagiQtouch_Driver:
                 return False
             raise
 
-        self._AccessToken = cog.access_token
-        self._RefreshToken = cog.refresh_token
-        self._IdToken = cog.id_token
+        self._AccessToken = self._cognito.access_token
+        self._RefreshToken = self._cognito.refresh_token
+        self._IdToken = self._cognito.id_token
 
         ## Get MACADDRESS
+        headers = await self._get_auth()
         async with self._httpsession.get(
-            ApiUrl + "loadmobiledevice", headers={"Authorization": self._IdToken}
+            ApiUrl + "loadmobiledevice", headers={"Authorization": self._cognito.id_token}
         ) as rsp:
             self._mac_address = (await rsp.json())[0]["MacAddressId"]
         _LOGGER.debug("MAC:", self._mac_address)
@@ -107,6 +108,10 @@ class MagiQtouch_Driver:
         # TODO
         pass
 
+    async def _get_auth(self):
+        await self._cognito.check_token(renew=True)
+        return {"Authorization": f"Bearer {self._cognito.id_token}"}
+
     async def initial_refresh(self):
         if not self.logged_in:
             raise ValueError("Not logged in")
@@ -117,8 +122,9 @@ class MagiQtouch_Driver:
         self._update_listener = listener
 
     async def refresh_state(self, initial=False):
+        headers = await self._get_auth()
         async with self._httpsession.put(
-            NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
+            NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
             data=json.dumps(
                 {
                     "SerialNo": self._mac_address,
@@ -132,7 +138,7 @@ class MagiQtouch_Driver:
         if initial:
             # Get system details so we can see how many zones are in use.
             async with self._httpsession.get(
-                ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+                ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers=headers
                 ) as rsp:
                     if rsp.status == 401:
                         raise UnauthorisedTokenException
@@ -141,7 +147,7 @@ class MagiQtouch_Driver:
                     self.current_system_state = new_system_state
 
         async with self._httpsession.get(
-            ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers={"Authorization": self._IdToken}
+            ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers=headers 
             ) as rsp:
                 if rsp.status == 401:
                     raise UnauthorisedTokenException
@@ -199,11 +205,11 @@ class MagiQtouch_Driver:
                     if checker(self.current_state):
                         update_lock.release()
 
-
                 self._update_listener_override = override_listener
 
+            headers = await self._get_auth()
             async with self._httpsession.put(
-                NewWebApiUrl + f"devices/{self._mac_address}", headers={"Authorization": f"Bearer {self._IdToken}"},
+                NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
                 data=json,
                 ) as rsp:
                 _LOGGER.debug(f"Update response received: {rsp.json()}")
