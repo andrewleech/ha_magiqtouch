@@ -65,6 +65,8 @@ from .const import (
 
 _LOGGER = logging.getLogger("magiqtouch")
 
+USE_AUTO_FOR_COOLING_TEMPERATURE_MODE = False
+
 # Validation of the user's configuration
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
@@ -75,10 +77,11 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESET_MODE
 
-HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_HEAT, HVAC_MODE_AUTO]
+HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_HEAT]
 
-FAN_SPEED_AUTO = "Temperature"
-FAN_SPEEDS = [str(spd+1) for spd in range(10)] + [FAN_SPEED_AUTO]
+FAN_SPEED_BY_TEMP = "Temperature"
+FAN_SPEED_TO_PREV = "Previous"
+FAN_SPEEDS = [FAN_SPEED_BY_TEMP, FAN_SPEED_TO_PREV] + [str(spd+1) for spd in range(10)]
 
 
 # DataUpdateCoordinator polling rate
@@ -240,7 +243,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             return CURRENT_HVAC_FAN
         elif self.controller.current_state.FAOCActualCompressorON == 1 \
             or self.controller.current_state.IAOCCompressorON == 1 \
-            or self.controller.current_state.EvapCRunning == 1:
+            or (self.controller.current_state.EvapCRunning and self.controller.current_state.PumpStatus):
             return CURRENT_HVAC_COOL
         else:
             return CURRENT_HVAC_IDLE
@@ -272,8 +275,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.debug(f"hvac_mode: (CFanOnlyOrCool) {HVAC_MODE_FAN_ONLY}")
             return HVAC_MODE_FAN_ONLY
         temperature_mode = self.controller.current_state.FanOrTempControl
-        evap_cooling_mode = self.controller.current_state.PumpStatus
+        evap_cooling_mode = self.controller.current_state.EvapCRunning
         if evap_cooling_mode:
+            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE and temperature_mode:
+                # Cooling to set temperature
+                _LOGGER.debug(f"hvac_mode: {HVAC_MODE_AUTO} (temperature)")
+                return HVAC_MODE_AUTO
             _LOGGER.debug(f"hvac_mode: {HVAC_MODE_COOL}")
             return HVAC_MODE_COOL
         heating_running = self.controller.current_state.HRunning
@@ -283,9 +290,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
                 return HVAC_MODE_FAN_ONLY
             _LOGGER.debug(f"hvac_mode: {HVAC_MODE_HEAT}")
             return HVAC_MODE_HEAT
-        # Cooling with fan speed
-        _LOGGER.debug(f"hvac_mode: {HVAC_MODE_AUTO}")
-        return HVAC_MODE_AUTO
+
+        _LOGGER.warning(f"hvac_mode: (UNKNOWN) {HVAC_MODE_OFF} current_state:{self.controller.current_state}")
+        return HVAC_MODE_OFF
 
     @property
     def hvac_modes(self):
@@ -295,10 +302,14 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             modes.append(HVAC_MODE_HEAT)
             if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
                 modes.append(HVAC_MODE_COOL)
+                if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
+                    modes.append(HVAC_MODE_AUTO)
         if self.controller.current_system_state.AOCInverterInSystem > 0 \
             or self.controller.current_system_state.AOCFixedInSystem > 0 \
             or self.controller.current_system_state.NoOfEVAPInSystem > 0:
             modes.append(HVAC_MODE_COOL)
+            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
+                modes.append(HVAC_MODE_AUTO)
         return modes
 
     async def async_set_hvac_mode(self, hvac_mode):
@@ -314,11 +325,14 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
             await self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
-            await self.controller.set_cooling_by_temperature()
+            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
+                await self.controller.set_cooling_by_speed()
+            else:
+                await self.controller.set_cooling()
         elif hvac_mode == HVAC_MODE_HEAT:
             await self.controller.set_heating()
-        elif hvac_mode == HVAC_MODE_AUTO:
-            await self.controller.set_cooling_by_speed()
+        elif hvac_mode == HVAC_MODE_AUTO and USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
+            await self.controller.set_cooling_by_temperature()
         else:
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
         # If we're not turning anything off, and this isn't a "whole system" zone, make sure this zone is on
@@ -337,21 +351,23 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return the current fan modes."""
         if self.controller.current_state.FanOrTempControl == 1:
              # running in temperature set point mode
-             return FAN_SPEED_AUTO
+             return FAN_SPEED_BY_TEMP
         speed = str(self.controller.current_state.CFanSpeed)
         if speed == "0":
-            return FAN_SPEED_AUTO
+            return FAN_SPEED_BY_TEMP
         return speed
 
     async def async_set_fan_mode(self, fan_mode):
         if str(fan_mode) not in FAN_SPEEDS:
             _LOGGER.warning("Unknown fan speed: %s" % fan_mode)
-
         else:
             _LOGGER.debug("Set fan to: %s" % fan_mode)
-            if fan_mode == FAN_SPEED_AUTO:
-                fan_mode = 0
-            await self.controller.set_current_speed(fan_mode)
+            if fan_mode == FAN_SPEED_BY_TEMP:
+                await self.controller.set_cooling_by_temperature()
+            elif fan_mode == FAN_SPEED_TO_PREV:
+                await self.controller.set_cooling_by_speed()
+            else:
+                await self.controller.set_current_speed(fan_mode)
 
         await self.coordinator.async_request_refresh()
 
