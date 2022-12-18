@@ -1,4 +1,4 @@
-
+import json
 from dataclasses import dataclass, field
 import inspect
 from structured_config import Structure, IntField, StrField
@@ -191,6 +191,10 @@ class RemoteStatus(Structure):
     ProgramModeOverriddenZone10 = 0
     SetTempZone10 = 0
     ActualTempZone10 = 0
+    
+    def __str__(self):
+        return json.dumps(self.__as_dict__())
+
 
 @dataclass
 class SystemDetails:

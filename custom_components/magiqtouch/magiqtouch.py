@@ -341,8 +341,10 @@ def main():
 
     while not m.current_state:
         time.sleep(1)
-    pp(m.current_state.__as_dict__())
-
+    print("")
+    print("Current State:")
+    print(str(m.current_state))
+    print("")
 
 if __name__ == "__main__":
     main()
