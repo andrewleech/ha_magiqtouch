@@ -192,6 +192,26 @@ class RemoteStatus(Structure):
     SetTempZone10 = 0
     ActualTempZone10 = 0
     
+    def __eq__(self, other):
+        if not isinstance(other, RemoteStatus):
+            return False
+        s = self.__as_dict__()
+        o = other.__as_dict__()
+        
+        for key in list(s.keys()):
+            if "Actual" in key:
+                s.pop(key)
+                o.pop(key)
+            elif key in (
+                "DateKey",
+                "TimeKey",
+                "TimeRunning",
+                "SignalStrength",
+            ):
+                s.pop(key)
+                o.pop(key)
+        return s == o
+        
     def __str__(self):
         return json.dumps(self.__as_dict__())
 

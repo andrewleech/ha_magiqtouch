@@ -65,6 +65,14 @@ class MagiQtouch_Driver:
 
         self.logged_in = False
 
+        self.verbose = False
+
+    def set_verbose(self, verbose, initial=False):
+        self.verbose = verbose
+        if verbose and not initial:
+            _LOGGER.warn(f"Current System State: {json.dumps(self.current_system_state.__dict__)}")
+            _LOGGER.warn(f"Current State: {self.current_state}")
+    
     async def login(self, httpsession=None):
         _LOGGER.info("Logging in...")
         self._httpsession = httpsession or aiohttp.ClientSession()
@@ -145,6 +153,8 @@ class MagiQtouch_Driver:
                     data = await rsp.json()
                     new_system_state = SystemDetails.from_dict(data)
                     self.current_system_state = new_system_state
+                    if self.verbose:
+                        _LOGGER.warn(f"Current System State: {json.dumps(self.current_system_state.__dict__)}")
 
         async with self._httpsession.get(
             ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers=headers 
@@ -160,6 +170,8 @@ class MagiQtouch_Driver:
                 elif self._update_listener:
                     _LOGGER.debug("State updated: %s" % new_state)
                     self._update_listener()
+                if self.verbose and str(new_state) != str(self.current_state):
+                    _LOGGER.warn(f"Current State: {new_state}")
                 self.current_state = new_state
 
     def new_remote_props(self, state=None):
@@ -213,7 +225,8 @@ class MagiQtouch_Driver:
                 data=json,
                 ) as rsp:
                 _LOGGER.debug(f"Update response received: {rsp.json()}")
-            _LOGGER.warn("Sent: %s" % json)
+            if self.verbose:
+                _LOGGER.warn("Sent: %s" % json)
 
             if checker:
                 # Wait for expected response

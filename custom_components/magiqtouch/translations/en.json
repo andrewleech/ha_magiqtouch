@@ -19,5 +19,15 @@
             }
         }
     },
-    "title": "Seeley MagiQtouch"
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "data": {
+          "log_json": "Log the sent and received json data when anything is changed."
+        }
+      }
+    }
+  },
+  "title": "Seeley MagiQtouch"
 }
