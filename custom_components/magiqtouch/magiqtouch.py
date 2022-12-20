@@ -162,8 +162,7 @@ class MagiQtouch_Driver:
                 if rsp.status == 401:
                     raise UnauthorisedTokenException
                 data = await rsp.json()
-                new_state = RemoteStatus()
-                new_state.__update__(data)
+                new_state = RemoteStatus.from_dict(data)
                 if self._update_listener_override:
                     _LOGGER.debug("State watching: %s" % new_state)
                     self._update_listener_override()
@@ -208,7 +207,7 @@ class MagiQtouch_Driver:
 
     async def _send_remote_props(self, data=None, checker=None):
         data = data or self.new_remote_props()
-        json = data.__json__(indent=0).replace("\n", "")
+        jdata = json.dumps(data.__dict__)
         try:
             update_lock = threading.Lock()
             if checker:
@@ -222,11 +221,11 @@ class MagiQtouch_Driver:
             headers = await self._get_auth()
             async with self._httpsession.put(
                 NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
-                data=json,
+                data=jdata,
                 ) as rsp:
                 _LOGGER.debug(f"Update response received: {rsp.json()}")
             if self.verbose:
-                _LOGGER.warn("Sent: %s" % json)
+                _LOGGER.warn("Sent: %s" % jdata)
 
             if checker:
                 # Wait for expected response

@@ -5,9 +5,5 @@
   "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
   "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
   "dependencies": [],
-  "codeowners": ["andrew@alelec.net"],
-  "requirements": [
-    "structured-config==4.12"
-  ],
-  "version": "2.0"
+  "version": "3.0"
 }

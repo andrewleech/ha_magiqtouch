@@ -1,202 +1,211 @@
 import json
 from dataclasses import dataclass, field
 import inspect
-from structured_config import Structure, IntField, StrField
 from typing import Any, Dict
 
+@dataclass
+class RemoteAccessRequest:
+    SerialNo: str = ""
+    TimeRequest: str = ""
+    StandBy: int = 0
+    EvapCRunning: int = 0
+    CTemp: int = 0
+    CFanSpeed: int = 0
+    CFanOnly: int = 0
+    CThermosOrFan: int = 0
+    HRunning: int = 0
+    HTemp: int = 0
+    HFanSpeed: int = 0
+    HFanOnly: int = 0
+    FAOCRunning: int = 0
+    FAOCTemp: int = 0
+    IAOCRunning: int = 0
+    IAOCTemp: int = 0
 
-class RemoteAccessRequest(Structure):
-    SerialNo = StrField("")
-    TimeRequest = StrField("")
-    StandBy = IntField(0)
-    EvapCRunning = IntField(0)
-    CTemp = IntField(0)
-    CFanSpeed = IntField(0)
-    CFanOnly = IntField(0)
-    CThermosOrFan = IntField(0)
-    HRunning = IntField(0)
-    HTemp = IntField(0)
-    HFanSpeed = IntField(0)
-    HFanOnly = IntField(0)
-    FAOCRunning = IntField(0)
-    FAOCTemp = IntField(0)
-    IAOCRunning = IntField(0)
-    IAOCTemp = IntField(0)
+    OnOffZone1: int = 0
+    TempZone1: int = 0
+    Override1: int = 0
 
-    OnOffZone1 = IntField(0)
-    TempZone1 = IntField(0)
-    Override1 = IntField(0)
+    OnOffZone2: int = 0
+    TempZone2: int = 0
+    Override2: int = 0
 
-    OnOffZone2 = IntField(0)
-    TempZone2 = IntField(0)
-    Override2 = IntField(0)
+    OnOffZone3: int = 0
+    TempZone3: int = 0
+    Override3: int = 0
 
-    OnOffZone3 = IntField(0)
-    TempZone3 = IntField(0)
-    Override3 = IntField(0)
+    OnOffZone4: int = 0
+    TempZone4: int = 0
+    Override4: int = 0
 
-    OnOffZone4 = IntField(0)
-    TempZone4 = IntField(0)
-    Override4 = IntField(0)
+    OnOffZone5: int = 0
+    TempZone5: int = 0
+    Override5: int = 0
 
-    OnOffZone5 = IntField(0)
-    TempZone5 = IntField(0)
-    Override5 = IntField(0)
+    OnOffZone6: int = 0
+    TempZone6: int = 0
+    Override6: int = 0
 
-    OnOffZone6 = IntField(0)
-    TempZone6 = IntField(0)
-    Override6 = IntField(0)
+    OnOffZone7: int = 0
+    TempZone7: int = 0
+    Override7: int = 0
 
-    OnOffZone7 = IntField(0)
-    TempZone7 = IntField(0)
-    Override7 = IntField(0)
+    OnOffZone8: int = 0
+    TempZone8: int = 0
+    Override8: int = 0
 
-    OnOffZone8 = IntField(0)
-    TempZone8 = IntField(0)
-    Override8 = IntField(0)
+    OnOffZone9: int = 0
+    TempZone9: int = 0
+    Override9: int = 0
 
-    OnOffZone9 = IntField(0)
-    TempZone9 = IntField(0)
-    Override9 = IntField(0)
+    OnOffZone10: int = 0
+    TempZone10: int = 0
+    Override10: int = 0
 
-    OnOffZone10 = IntField(0)
-    TempZone10 = IntField(0)
-    Override10 = IntField(0)
+    CC3200FW_Major: int = 0
+    CC3200FW_Minor: int = 0
+    STM32FW_Major: int = 0
+    STM32FW_Minor: int = 0
 
-    CC3200FW_Major = IntField(0)
-    CC3200FW_Minor = IntField(0)
-    STM32FW_Major = IntField(0)
-    STM32FW_Minor = IntField(0)
-
-    TouchCount = IntField(0)
+    TouchCount: int = 0
     CCL = None
     STL = None
 
+    @classmethod
+    def from_dict(cls, env):      
+        """ Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964 """
+        return cls(**{
+            k: v for k, v in env.items() 
+            if k in inspect.signature(cls).parameters
+        })
 
-class RemoteStatus(Structure):
-    SystemOn = 0
-    MacAddressId = ''
-    DateKey = 0  # 20201028
-    TimeKey = 0  # 1155
-    TimeRunning = ''  # '2020-10-28 19:15:43.186'
-    CoolerType = 0
-    TouchCount = 0  # 39
-    ExternalTemp = 0
-    InternalTemp = 0  # 16
-    EvapCRunning = 0  # 1
-    FanOrTempControl = 0
-    PumpStatus = 0
-    CFanOnlyOrCool = 0  # 1
-    NightQuietMode = 0  # 1
-    PumpOffExternalAirSensor = 0  # 1
-    DrainExternalSensor = 0
-    ManualDrain = 0
-    PadFlush = 0
-    AutoClean = 0
-    DrainDry = 0
-    FaultCodePresent = 0
-    CFanSpeed = 0
-    CTemp = 0  # 27
+
+@dataclass
+class RemoteStatus:
+    SystemOn: int = 0
+    MacAddressId: str = ""
+    DateKey: int = 0  # 20201028
+    TimeKey: int = 0  # 1155
+    TimeRunning: str = ""  # '2020-10-28 19:15:43.186'
+    CoolerType: int = 0
+    TouchCount: int = 0  # 39
+    ExternalTemp: int = 0
+    InternalTemp: int = 0  # 16
+    EvapCRunning: int = 0  # 1
+    FanOrTempControl: int = 0
+    PumpStatus: int = 0
+    CFanOnlyOrCool: int = 0  # 1
+    NightQuietMode: int = 0  # 1
+    PumpOffExternalAirSensor: int = 0  # 1
+    DrainExternalSensor: int = 0
+    ManualDrain: int = 0
+    PadFlush: int = 0
+    AutoClean: int = 0
+    DrainDry: int = 0
+    FaultCodePresent: int = 0
+    CFanSpeed: int = 0
+    CTemp: int = 0  # 27
     HumiditySetPoint = 0  # 60
-    HumidityActualValue = 0
-    Fault = 0
-    HRunning = 0
-    HFanOnly = 0
-    BasicFault = 0
-    Spanner = 0
-    HFanSpeed = 0
-    HActualFanSpeed = 0
-    HActualGasRate = 0
-    HSetGasRate = 0
-    HTemp = 0  # 27
-    HActualGasRateVariable = 0
-    ThermistorTemperature = 0
-    HNewFault = 0
-    FlameSenseVoltage = 0
-    FAOCRunning = 0
-    FAOCActualCompressorON = 0
-    FAOCTemp = 0  # 27
-    IAOCRunning = 0
-    IAOCCompressorON = 0
-    IAOCSetTemp = 0  # 27
-    IAOCActualTemp = 0
-    ProgramMode = 0
-    ProgramModeOverridden = 0
-    UpdateMicroProcessor = 0
-    UpdateWiFiModule = 0
-    ClearSoftwareUpdate = 0
-    LoggingFrequency = 0
-    EnableLiveStreaming = 0
-    UpdateInPogress = 0
-    UpdateCompleted = 0
-    UpdateFailed = 0
-    SignalStrength = 0  # 26
-    OnOffZone1 = 0
-    DamperOnOffZone1 = 0
-    ProgramModeZone1 = 0
-    ProgramModeOverriddenZone1 = 0
-    SetTempZone1 = 0  # 27
-    ActualTempZone1 = 0  # -99
-    OnOffZone2 = 0
-    DamperOnOffZone2 = 0
-    ProgramModeZone2 = 0
-    ProgramModeOverriddenZone2 = 0
-    SetTempZone2 = 0
-    ActualTempZone2 = 0
-    OnOffZone3 = 0
-    DamperOnOffZone3 = 0
-    ProgramModeZone3 = 0
-    ProgramModeOverriddenZone3 = 0
-    SetTempZone3 = 0
-    ActualTempZone3 = 0
-    OnOffZone4 = 0
-    DamperOnOffZone4 = 0
-    ProgramModeZone4 = 0
-    ProgramModeOverriddenZone4 = 0
-    SetTempZone4 = 0
-    ActualTempZone4 = 0
-    OnOffZone5 = 0
-    DamperOnOffZone5 = 0
-    ProgramModeZone5 = 0
-    ProgramModeOverriddenZone5 = 0
-    SetTempZone5 = 0
-    ActualTempZone5 = 0
-    OnOffZone6 = 0
-    DamperOnOffZone6 = 0
-    ProgramModeZone6 = 0
-    ProgramModeOverriddenZone6 = 0
-    SetTempZone6 = 0
-    ActualTempZone6 = 0
-    OnOffZone7 = 0
-    DamperOnOffZone7 = 0
-    ProgramModeZone7 = 0
-    ProgramModeOverriddenZone7 = 0
-    SetTempZone7 = 0
-    ActualTempZone7 = 0
-    OnOffZone8 = 0
-    DamperOnOffZone8 = 0
-    ProgramModeZone8 = 0
-    ProgramModeOverriddenZone8 = 0
-    SetTempZone8 = 0
-    ActualTempZone8 = 0
-    OnOffZone9 = 0
-    DamperOnOffZone9 = 0
-    ProgramModeZone9 = 0
-    ProgramModeOverriddenZone9 = 0
-    SetTempZone9 = 0
-    ActualTempZone9 = 0
-    OnOffZone10 = 0
-    DamperOnOffZone10 = 0
-    ProgramModeZone10 = 0
-    ProgramModeOverriddenZone10 = 0
-    SetTempZone10 = 0
-    ActualTempZone10 = 0
+    HumidityActualValue: int = 0
+    Fault: int = 0
+    HRunning: int = 0
+    HFanOnly: int = 0
+    BasicFault: int = 0
+    Spanner: int = 0
+    HFanSpeed: int = 0
+    HActualFanSpeed: int = 0
+    HActualGasRate: int = 0
+    HSetGasRate: int = 0
+    HTemp: int = 0  # 27
+    HActualGasRateVariable: int = 0
+    ThermistorTemperature: int = 0
+    HNewFault: int = 0
+    FlameSenseVoltage: int = 0
+    FAOCRunning: int = 0
+    FAOCActualCompressorON: int = 0
+    FAOCTemp: int = 0  # 27
+    IAOCRunning: int = 0
+    IAOCCompressorON: int = 0
+    IAOCSetTemp: int = 0  # 27
+    IAOCActualTemp: int = 0
+    ProgramMode: int = 0
+    ProgramModeOverridden: int = 0
+    UpdateMicroProcessor: int = 0
+    UpdateWiFiModule: int = 0
+    ClearSoftwareUpdate: int = 0
+    LoggingFrequency: int = 0
+    EnableLiveStreaming: int = 0
+    UpdateInPogress: int = 0
+    UpdateCompleted: int = 0
+    UpdateFailed: int = 0
+    SignalStrength: int = 0  # 26
+    OnOffZone1: int = 0
+    DamperOnOffZone1: int = 0
+    ProgramModeZone1: int = 0
+    ProgramModeOverriddenZone1: int = 0
+    SetTempZone1: int = 0  # 27
+    ActualTempZone1: int = 0  # -99
+    OnOffZone2: int = 0
+    DamperOnOffZone2: int = 0
+    ProgramModeZone2: int = 0
+    ProgramModeOverriddenZone2: int = 0
+    SetTempZone2: int = 0
+    ActualTempZone2: int = 0
+    OnOffZone3: int = 0
+    DamperOnOffZone3: int = 0
+    ProgramModeZone3: int = 0
+    ProgramModeOverriddenZone3: int = 0
+    SetTempZone3: int = 0
+    ActualTempZone3: int = 0
+    OnOffZone4: int = 0
+    DamperOnOffZone4: int = 0
+    ProgramModeZone4: int = 0
+    ProgramModeOverriddenZone4: int = 0
+    SetTempZone4: int = 0
+    ActualTempZone4: int = 0
+    OnOffZone5: int = 0
+    DamperOnOffZone5: int = 0
+    ProgramModeZone5: int = 0
+    ProgramModeOverriddenZone5: int = 0
+    SetTempZone5: int = 0
+    ActualTempZone5: int = 0
+    OnOffZone6: int = 0
+    DamperOnOffZone6: int = 0
+    ProgramModeZone6: int = 0
+    ProgramModeOverriddenZone6: int = 0
+    SetTempZone6: int = 0
+    ActualTempZone6: int = 0
+    OnOffZone7: int = 0
+    DamperOnOffZone7: int = 0
+    ProgramModeZone7: int = 0
+    ProgramModeOverriddenZone7: int = 0
+    SetTempZone7: int = 0
+    ActualTempZone7: int = 0
+    OnOffZone8: int = 0
+    DamperOnOffZone8: int = 0
+    ProgramModeZone8: int = 0
+    ProgramModeOverriddenZone8: int = 0
+    SetTempZone8: int = 0
+    ActualTempZone8: int = 0
+    OnOffZone9: int = 0
+    DamperOnOffZone9: int = 0
+    ProgramModeZone9: int = 0
+    ProgramModeOverriddenZone9: int = 0
+    SetTempZone9: int = 0
+    ActualTempZone9: int = 0
+    OnOffZone10: int = 0
+    DamperOnOffZone10: int = 0
+    ProgramModeZone10: int = 0
+    ProgramModeOverriddenZone10: int = 0
+    SetTempZone10: int = 0
+    ActualTempZone10: int = 0
     
     def __eq__(self, other):
         if not isinstance(other, RemoteStatus):
             return False
-        s = self.__as_dict__()
-        o = other.__as_dict__()
+        s = dict(**self.__dict__)
+        o = dict(**other.__dict__)
         
         for key in list(s.keys()):
             if "Actual" in key:
@@ -213,8 +222,16 @@ class RemoteStatus(Structure):
         return s == o
         
     def __str__(self):
-        return json.dumps(self.__as_dict__())
+        return json.dumps(self.__dict__)
 
+    @classmethod
+    def from_dict(cls, env):      
+        """ Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964 """
+        return cls(**{
+            k: v for k, v in env.items() 
+            if k in inspect.signature(cls).parameters
+        })
 
 @dataclass
 class SystemDetails:

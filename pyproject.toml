@@ -6,15 +6,9 @@ authors = ["Andrew Leech <andrew@alelec.net>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-structured-config = "^4.12"
 mandate = "2.0.1"
-
-#aiohttp = "^3.7.2"
-#botocore = "^1.19.7"
-#boto3 = "^1.19.7"
-#pycognito = "^0.1.4"
+aiohttp = "^3.7.2"
 requests = "^2.28.1"
-#aiorequests = "^0.1.1"
 
 [tool.poetry.dev-dependencies]
 homeassistant = "^2022.8.6"
