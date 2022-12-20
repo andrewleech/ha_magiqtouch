@@ -154,10 +154,9 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
             await self.controller.login()
 
 class MagiQtouch(CoordinatorEntity, ClimateEntity):
-    """Representation of an Awesome Light."""
+    """Representation of an MagIQtouch Thermostat."""
 
     def __init__(self, entry_id, controller: MagiQtouch_Driver, coordinator: MagiQtouchCoordinator, zone_index):
-        """Initialize an AwesomeLight."""
         super().__init__(coordinator)
         self.controller = controller
         self.zone_index = zone_index

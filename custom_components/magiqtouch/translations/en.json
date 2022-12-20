@@ -15,7 +15,7 @@
                     "password": "Password",
                     "username": "Email / User"
                 },
-                "title": "Seeley MagiQtouch login"
+                "title": "Seeley MagIQtouch login"
             }
         }
     },
@@ -29,5 +29,5 @@
       }
     }
   },
-  "title": "Seeley MagiQtouch"
+  "title": "Seeley MagIQtouch"
 }
