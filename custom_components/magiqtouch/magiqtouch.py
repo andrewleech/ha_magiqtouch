@@ -283,6 +283,7 @@ class MagiQtouch_Driver:
         await self._send_remote_props(checker=checker)
 
     async def set_current_speed(self, speed):
+        speed = int(speed)
         if speed == 0:
             # Control to temperature, not fan speed
             self.current_state.FanOrTempControl = 1
@@ -294,6 +295,7 @@ class MagiQtouch_Driver:
             await self._send_remote_props(checker=checker)
 
     async def set_temperature(self, new_temp):
+        new_temp = int(new_temp)
         self.current_state.CTemp = new_temp
         self.current_state.HTemp = new_temp
         self.current_state.FAOCTemp = new_temp
