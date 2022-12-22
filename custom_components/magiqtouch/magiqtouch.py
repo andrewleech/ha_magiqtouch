@@ -256,10 +256,31 @@ class MagiQtouch_Driver:
         checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1 and state.HFanOnly == 1
         await self._send_remote_props(checker=checker)
 
+    async def set_fan_only_evap(self):
+        self.current_state.EvapCRunning = 1
+        #self.current_state.CFanOnlyOrCool = 1
+        self.current_state.HRunning = 0
+        await self.set_fan_only()
+
+    async def set_fan_only_heater(self):
+        self.current_state.EvapCRunning = 0
+        #self.current_state.CFanOnlyOrCool = 0
+        self.current_state.HRunning = 1
+        await self.set_fan_only()
+
+    async def set_heating_by_temperature(self):
+        self.current_state.FanOrTempControl = 1
+        await self.set_heating()
+
+    async def set_heating_by_speed(self):
+        self.current_state.FanOrTempControl = 0
+        await self.set_heating()
+
     async def set_heating(self):
         self.current_state.SystemOn = 1
         self.current_state.HFanOnly = 0
         self.current_state.HRunning = 1
+        self.current_state.EvapCRunning = 0
         def checker(state):
             return state.HFanOnly == 0 and \
                    state.SystemOn == 1 and \
@@ -277,22 +298,50 @@ class MagiQtouch_Driver:
     async def set_cooling(self):
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 0
+        self.current_state.HRunning = 0
+        self.current_state.EvapCRunning = 1
         def checker(state):
             return state.CFanOnlyOrCool == 0 and \
                    state.SystemOn == 1
         await self._send_remote_props(checker=checker)
 
+    async def set_aoc_by_temperature(self):
+        self.current_state.FanOrTempControl = 1
+        await self.set_add_on_cooler()
+
+    async def set_aoc_by_speed(self):
+        self.current_state.FanOrTempControl = 0
+        await self.set_add_on_cooler()
+
+    async def set_add_on_cooler(self):
+        self.current_state.SystemOn = 1
+        self.current_state.CFanOnlyOrCool = 0
+        self.current_state.HRunning = 0
+        self.current_state.EvapCRunning = 0
+        change = [
+            ("SystemOn", 1), 
+            ("CFanOnlyOrCool", 0), 
+            ("HRunning", 0),
+        ]
+        if self.current_system_state.AOCFixedInSystem:
+            self.current_state.FAOCRunning = 1
+            change.append(("FAOCRunning", 1))
+        elif self.current_system_state.AOCInverterInSystem:
+            self.current_state.IAOCRunning = 1
+            change.append(("IAOCRunning", 1))
+        
+        def checker(state):
+            nonlocal change
+            return all((getattr(state, f) == v for f, v in change))
+        
+        await self._send_remote_props(checker=checker)
+
     async def set_current_speed(self, speed):
         speed = int(speed)
-        if speed == 0:
-            # Control to temperature, not fan speed
-            self.current_state.FanOrTempControl = 1
-            checker = lambda state: state.FanOrTempControl == 0
-            await self._send_remote_props(checker=checker)
-        else:
-            self.current_state.CFanSpeed = speed
-            checker = lambda state: state.CFanSpeed == speed
-            await self._send_remote_props(checker=checker)
+        self.current_state.CFanSpeed = speed
+        self.current_state.HFanSpeed = speed
+        checker = lambda state: state.CFanSpeed == speed
+        await self._send_remote_props(checker=checker)
 
     async def set_temperature(self, new_temp):
         new_temp = int(new_temp)

@@ -65,7 +65,6 @@ from .const import (
 
 _LOGGER = logging.getLogger("magiqtouch")
 
-USE_AUTO_FOR_COOLING_TEMPERATURE_MODE = False
 
 # Validation of the user's configuration
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -75,7 +74,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     }
 )
 
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  # | SUPPORT_PRESET_MODE
+SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE  | SUPPORT_PRESET_MODE
 
 HVAC_MODES = [HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_FAN_ONLY, HVAC_MODE_HEAT]
 
@@ -83,6 +82,14 @@ FAN_SPEED_BY_TEMP = "Temperature"
 FAN_SPEED_TO_PREV = "Previous"
 FAN_SPEEDS = [FAN_SPEED_BY_TEMP, FAN_SPEED_TO_PREV] + [str(spd+1) for spd in range(10)]
 
+PRESET_FAN_FRESH = "Fan: Fresh Air"
+PRESET_FAN_RECIRC = "Fan: Recirculate"
+PRESET_EVAP_TEMP = "Evaporative: set temperature"
+PRESET_EVAP_FAN_SPEED = "Evaporative: set fan speed"
+PRESET_HEAT_TEMP = "Heating: set temperature"
+PRESET_HEAT_FAN_SPEED = "Heating: set fan speed"
+PRESET_COOL_TEMP = "Cooling: set temperature"
+PRESET_COOL_FAN_SPEED = "Cooling: set fan speed"
 
 # DataUpdateCoordinator polling rate
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -276,10 +283,6 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         temperature_mode = self.controller.current_state.FanOrTempControl
         evap_cooling_mode = self.controller.current_state.EvapCRunning
         if evap_cooling_mode:
-            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE and temperature_mode:
-                # Cooling to set temperature
-                _LOGGER.debug(f"hvac_mode: {HVAC_MODE_AUTO} (temperature)")
-                return HVAC_MODE_AUTO
             _LOGGER.debug(f"hvac_mode: {HVAC_MODE_COOL}")
             return HVAC_MODE_COOL
         heating_running = self.controller.current_state.HRunning
@@ -301,14 +304,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             modes.append(HVAC_MODE_HEAT)
             if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
                 modes.append(HVAC_MODE_COOL)
-                if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
-                    modes.append(HVAC_MODE_AUTO)
+
         if self.controller.current_system_state.AOCInverterInSystem > 0 \
             or self.controller.current_system_state.AOCFixedInSystem > 0 \
             or self.controller.current_system_state.NoOfEVAPInSystem > 0:
             modes.append(HVAC_MODE_COOL)
-            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
-                modes.append(HVAC_MODE_AUTO)
+
         return modes
 
     async def async_set_hvac_mode(self, hvac_mode):
@@ -324,14 +325,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         elif hvac_mode == HVAC_MODE_FAN_ONLY:
             await self.controller.set_fan_only()
         elif hvac_mode == HVAC_MODE_COOL:
-            if USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
-                await self.controller.set_cooling_by_speed()
+            if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
+                await self.controller.set_add_on_cooling()
             else:
                 await self.controller.set_cooling()
         elif hvac_mode == HVAC_MODE_HEAT:
             await self.controller.set_heating()
-        elif hvac_mode == HVAC_MODE_AUTO and USE_AUTO_FOR_COOLING_TEMPERATURE_MODE:
-            await self.controller.set_cooling_by_temperature()
         else:
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
         # If we're not turning anything off, and this isn't a "whole system" zone, make sure this zone is on
@@ -384,25 +383,78 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     #
     #     return dev_specific
 
-    # @property
-    # def preset_mode(self):
-    #     """Return the current preset mode, e.g., home, away, temp.
-    #     Requires SUPPORT_PRESET_MODE.
-    #     """
-    #     return EQ_TO_HA_PRESET.get(self._thermostat.mode)
-    #
-    # @property
-    # def preset_modes(self):
-    #     """Return a list of available preset modes.
-    #     Requires SUPPORT_PRESET_MODE.
-    #     """
-    #     return list(HA_TO_EQ_PRESET.keys())
+    @property
+    def preset_mode(self):
+        """Return the current preset mode, e.g., home, away, temp.
+        Requires SUPPORT_PRESET_MODE.
+        """
+        if (
+            self.controller.current_state.HFanOnly == 1
+            and self.controller.current_state.HActualFanSpeed > 0
+            and self.controller.current_state.HFanSpeed > 0
+        ):
+            return PRESET_FAN_RECIRC
+        elif self.controller.current_state.CFanOnlyOrCool == 1:
+            return PRESET_FAN_FRESH
+        temperature_mode = self.controller.current_state.FanOrTempControl
+        evap_cooling_mode = self.controller.current_state.EvapCRunning
+        if evap_cooling_mode:
+            if temperature_mode:
+                return PRESET_EVAP_TEMP
+            return PRESET_EVAP_FAN_SPEED
+        heating_running = self.controller.current_state.HRunning
+        if heating_running:
+            if temperature_mode:
+                return PRESET_HEAT_TEMP
+            return PRESET_HEAT_FAN_SPEED
+        return PRESET_NONE
+    
+    @property
+    def preset_modes(self):
+        """Return a list of available preset modes.
+        Requires SUPPORT_PRESET_MODE.
+        """
+        presets = [PRESET_NONE]
+        if self.controller.current_system_state.HeaterInSystem > 0:
+            presets.extend([
+                PRESET_HEAT_TEMP,
+                PRESET_HEAT_FAN_SPEED,
+                PRESET_FAN_RECIRC,
+            ])
+            if self.controller.current_system_state.Heater.get("AOCInstalled", 0) > 0:
+                presets.extend([
+                    PRESET_COOL_TEMP,
+                    PRESET_COOL_FAN_SPEED,
+                ])
+        if self.controller.current_system_state.NoOfEVAPInSystem > 0:
+            presets.extend([
+                PRESET_EVAP_TEMP,
+                PRESET_EVAP_FAN_SPEED,
+                PRESET_FAN_FRESH,
+            ])
+        return presets
 
-    # def set_preset_mode(self, preset_mode):
-    #     """Set new preset mode."""
-    #     if preset_mode == PRESET_NONE:
-    #         self.set_hvac_mode(HVAC_MODE_HEAT)
-    #     self._thermostat.mode = HA_TO_EQ_PRESET[preset_mode]
+    async def async_set_preset_mode(self, preset_mode):
+        """Set new preset mode."""
+        if preset_mode == PRESET_FAN_FRESH:
+            await self.controller.set_fan_only_evap()
+        elif preset_mode == PRESET_FAN_RECIRC:
+            await self.controller.set_fan_only_heater()
+        elif preset_mode == PRESET_EVAP_TEMP:
+            await self.controller.set_cooling_by_temperature()
+        elif preset_mode == PRESET_EVAP_FAN_SPEED:
+            await self.controller.set_cooling_by_speed()
+        elif preset_mode == PRESET_HEAT_TEMP:
+            await self.controller.set_heating_by_temperature()
+        elif preset_mode == PRESET_HEAT_FAN_SPEEDP:
+            await self.controller.set_heating_by_speed()
+        elif preset_mode == PRESET_COOL_TEMP:
+            await self.controller.set_aoc_by_temperature()
+        elif preset_mode == PRESET_COOL_FAN_SPEED:
+            await self.controller.set_aoc_by_speed()
+        elif preset_mode == PRESET_NONE:
+            await self.async_set_hvac_mode(HVAC_MODE_OFF)
+        #self._thermostat.mode = HA_TO_EQ_PRESET[preset_mode]
 
     # def update(self):
     #     """Update the data from the thermostat."""
