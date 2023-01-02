@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import inspect
 from typing import Any, Dict
 
+
 @dataclass
 class RemoteAccessRequest:
     SerialNo: str = ""
@@ -72,13 +73,12 @@ class RemoteAccessRequest:
     STL = None
 
     @classmethod
-    def from_dict(cls, env):      
-        """ Converts a dict to a dataclass instance, ignoring extra vars.
-        Taken from https://stackoverflow.com/a/55096964 """
-        return cls(**{
-            k: v for k, v in env.items() 
-            if k in inspect.signature(cls).parameters
-        })
+    def from_dict(cls, env):
+        """Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964"""
+        return cls(
+            **{k: v for k, v in env.items() if k in inspect.signature(cls).parameters}
+        )
 
 
 @dataclass
@@ -200,13 +200,13 @@ class RemoteStatus:
     ProgramModeOverriddenZone10: int = 0
     SetTempZone10: int = 0
     ActualTempZone10: int = 0
-    
+
     def __eq__(self, other):
         if not isinstance(other, RemoteStatus):
             return False
         s = dict(**self.__dict__)
         o = dict(**other.__dict__)
-        
+
         for key in list(s.keys()):
             if "Actual" in key:
                 s.pop(key)
@@ -220,23 +220,25 @@ class RemoteStatus:
                 s.pop(key)
                 o.pop(key)
         return s == o
-        
+
     def __str__(self):
         return json.dumps(self.__dict__)
 
     @classmethod
-    def from_dict(cls, env):      
-        """ Converts a dict to a dataclass instance, ignoring extra vars.
-        Taken from https://stackoverflow.com/a/55096964 """
-        return cls(**{
-            k: v for k, v in env.items() 
-            if k in inspect.signature(cls).parameters
-        })
+    def from_dict(cls, env):
+        """Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964"""
+        return cls(
+            **{k: v for k, v in env.items() if k in inspect.signature(cls).parameters}
+        )
+
 
 @dataclass
 class SystemDetails:
     NoOfZones: int = 0
-    NoOfZonesControl: int = 0 # Best guess - these are the number of zones with temp control.
+    NoOfZonesControl: int = (
+        0  # Best guess - these are the number of zones with temp control.
+    )
     HeaterInSystem: int = 0
     AOCInverterInSystem: int = 0
     AOCFixedInSystem: int = 0
@@ -257,11 +259,9 @@ class SystemDetails:
     ZoneName10: str = ""
 
     @classmethod
-    def from_dict(cls, env):      
-        """ Converts a dict to a dataclass instance, ignoring extra vars.
-        Taken from https://stackoverflow.com/a/55096964 """
-        return cls(**{
-            k: v for k, v in env.items() 
-            if k in inspect.signature(cls).parameters
-        })
-
+    def from_dict(cls, env):
+        """Converts a dict to a dataclass instance, ignoring extra vars.
+        Taken from https://stackoverflow.com/a/55096964"""
+        return cls(
+            **{k: v for k, v in env.items() if k in inspect.signature(cls).parameters}
+        )

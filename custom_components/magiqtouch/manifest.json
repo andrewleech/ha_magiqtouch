@@ -1,9 +1,9 @@
-{ 
-  "domain": "magiqtouch",
-  "name": "Seeley MagIQtouch",
-  "config_flow": true,
-  "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
-  "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
-  "dependencies": [],
-  "version": "3.0"
+{
+    "domain": "magiqtouch",
+    "name": "Seeley MagIQtouch",
+    "config_flow": true,
+    "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
+    "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
+    "dependencies": [],
+    "version": "3.0",
 }

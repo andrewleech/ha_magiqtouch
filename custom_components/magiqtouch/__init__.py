@@ -1,6 +1,7 @@
 """The Seeley MagiQtouch integration."""
 import sys
 from pathlib import Path
+
 __vendor__ = str(Path(__file__).parent / "vendor")
 sys.path.append(__vendor__)
 
@@ -26,6 +27,7 @@ CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 PLATFORMS = [CLIMATE_DOMAIN]
 
 _LOGGER = logging.getLogger("magiqtouch")
+
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the Seeley MagiQtouch component."""
@@ -54,14 +56,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, component)
         )
-    # listen for changes to the configuration options 
+    # listen for changes to the configuration options
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
     return True
+
 
 async def options_update_listener(hass, config_entry):
     """Handle options update."""
     driver = hass.data[DOMAIN][config_entry.entry_id]
     driver.set_verbose(config_entry.options[CONF_VERBOSE])
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
