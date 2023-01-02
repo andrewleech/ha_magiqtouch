@@ -129,7 +129,7 @@ class MagiQtouch_Driver:
     def set_listener(self, listener):
         self._update_listener = listener
 
-    async def refresh_state(self, initial=False):
+    async def refresh_state(self, initial=False, process=True):
         headers = await self._get_auth()
         async with self._httpsession.put(
             NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
@@ -163,15 +163,32 @@ class MagiQtouch_Driver:
                     raise UnauthorisedTokenException
                 data = await rsp.json()
                 new_state = RemoteStatus.from_dict(data)
-                if self._update_listener_override:
-                    _LOGGER.debug("State watching: %s" % new_state)
-                    self._update_listener_override()
-                elif self._update_listener:
-                    _LOGGER.debug("State updated: %s" % new_state)
-                    self._update_listener()
-                if self.verbose and str(new_state) != str(self.current_state):
-                    _LOGGER.warn(f"Current State: {new_state}")
-                self.current_state = new_state
+                
+                if not process:
+                    return new_state
+                self.process_new_state(new_state)
+
+    async def wait_for_new_state(self, checker):
+        while new_state := await self.refresh_state(process=False):
+            now = datetime.now().astimezone().isoformat()
+            if checker(new_state):
+                _LOGGER.warning(f"Set: True {now} {new_state}")
+                self.process_new_state(new_state)
+                break
+            await asyncio.sleep(0.5)
+            _LOGGER.warning(f"Set: False {now} {new_state}")
+
+    def process_new_state(self, new_state):
+        if self._update_listener_override:
+            l = _LOGGER.warning if self.verbose else _LOGGER.debug
+            l("State watching: %s" % new_state)
+            return self._update_listener_override(new_state)
+        elif self._update_listener:
+            _LOGGER.debug("State updated: %s" % new_state)
+            self._update_listener()
+        if self.verbose and str(new_state) != str(self.current_state):
+            _LOGGER.warning(f"Current State: {new_state}")
+        self.current_state = new_state
 
     def new_remote_props(self, state=None):
         state = state or self.current_state
@@ -209,14 +226,20 @@ class MagiQtouch_Driver:
         data = data or self.new_remote_props()
         jdata = json.dumps(data.__dict__)
         try:
-            update_lock = threading.Lock()
-            if checker:
-                update_lock.acquire()
-                def override_listener():
-                    if checker(self.current_state):
-                        update_lock.release()
+            # update_lock = asyncio.Event()
+            # if checker:
+            #      async def override_listener(new_state):
+            #         nonlocal checker, update_lock, self
+            #         _LOGGER.warning(f"listen: {new_state}")
+            #         if checker(new_state):
+            #             _LOGGER.warning("true")
+            #             self.current_state = new_state
+            #             update_lock.set()
+            #         else:
+            #             _LOGGER.warning("false")
+            #             asyncio.create_task(self.refresh_state())
 
-                self._update_listener_override = override_listener
+            #     self._update_listener_override = override_listener
 
             headers = await self._get_auth()
             async with self._httpsession.put(
@@ -226,16 +249,14 @@ class MagiQtouch_Driver:
                 _LOGGER.debug(f"Update response received: {rsp.json()}")
             if self.verbose:
                 _LOGGER.warn("Sent: %s" % jdata)
-
             if checker:
                 # Wait for expected response
-                update_lock.acquire(timeout=6)
-
+                await asyncio.wait_for(self.wait_for_new_state(checker), timeout=8)
+            return True
         except Exception as ex:
-            _LOGGER.exception("Failed to publish", ex)
-            raise
-        finally:
-            self._update_listener_override = None
+            import traceback
+            _LOGGER.error(f"Failed to set value properly: {ex}")
+        return False
 
     async def set_off(self):
         self.current_state.SystemOn = 0
@@ -253,7 +274,12 @@ class MagiQtouch_Driver:
         self.current_state.SystemOn = 1
         self.current_state.CFanOnlyOrCool = 1
         self.current_state.HFanOnly = 1
-        checker = lambda state: state.CFanOnlyOrCool == 1 and state.SystemOn == 1 and state.HFanOnly == 1
+        checker = lambda state: (
+            state.SystemOn == 1 and (
+                state.CFanOnlyOrCool == 1 or 
+                state.HFanOnly == 1
+            )
+        )
         await self._send_remote_props(checker=checker)
 
     async def set_fan_only_evap(self):
