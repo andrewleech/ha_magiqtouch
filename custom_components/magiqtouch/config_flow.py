@@ -1,6 +1,6 @@
 """Config flow for Seeley MagiQtouch integration."""
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import voluptuous as vol
 
@@ -51,7 +51,7 @@ async def validate_input(hass: core.HomeAssistant, data):
     return {"title": "MagiQtouch"}
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Handle a config flow for Seeley MagiQtouch."""
 
     VERSION = 1
@@ -60,9 +60,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is None:
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
-            )
+            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
         errors = {}
 
@@ -99,9 +97,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> Dict[str, Any]:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> Dict[str, Any]:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="Settings", data=user_input)
