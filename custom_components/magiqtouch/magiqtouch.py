@@ -1,6 +1,7 @@
 if __name__ == "__main__":
     import sys
     from pathlib import Path
+
     __vendor__ = str(Path(__file__).parent / "vendor")
     sys.path.append(__vendor__)
 
@@ -28,14 +29,11 @@ AWS_REGION = "ap-southeast-2"
 AWS_USER_POOL_ID = "ap-southeast-2_uw5VVNlib"
 cognito_userpool_client_id = "6e1lu9fchv82uefiarsp0290v9"
 
-ApiUrl = (
-    "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
-)
+ApiUrl = "https://57uh36mbv1.execute-api.ap-southeast-2.amazonaws.com/api/"
 
 # Sniffed from iOS app, used to replace older mqtt interface.
 NewWebApiUrl = (
-    "https://tgjgb3bcf3.execute-api.ap-southeast-2.amazonaws.com/prod"
-    + "/v1/"
+    "https://tgjgb3bcf3.execute-api.ap-southeast-2.amazonaws.com/prod" + "/v1/"
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -70,9 +68,11 @@ class MagiQtouch_Driver:
     def set_verbose(self, verbose, initial=False):
         self.verbose = verbose
         if verbose and not initial:
-            _LOGGER.warn(f"Current System State: {json.dumps(self.current_system_state.__dict__)}")
+            _LOGGER.warn(
+                f"Current System State: {json.dumps(self.current_system_state.__dict__)}"
+            )
             _LOGGER.warn(f"Current State: {self.current_state}")
-    
+
     async def login(self, httpsession=None):
         _LOGGER.info("Logging in...")
         self._httpsession = httpsession or aiohttp.ClientSession()
@@ -84,8 +84,8 @@ class MagiQtouch_Driver:
                 user_pool_region=AWS_REGION,
                 username=self._user,
                 # Dummy credentials to bypass EC2 IMDS
-                access_key='AKIAIOSFODNN7EXAMPLE',
-                secret_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                access_key="AKIAIOSFODNN7EXAMPLE",
+                secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
             )
 
             await self._cognito.authenticate(self._password)
@@ -104,11 +104,12 @@ class MagiQtouch_Driver:
         ## Get MACADDRESS
         headers = await self._get_auth()
         async with self._httpsession.get(
-            ApiUrl + "loadmobiledevice", headers={"Authorization": self._cognito.id_token}
+            ApiUrl + "loadmobiledevice",
+            headers={"Authorization": self._cognito.id_token},
         ) as rsp:
             self._mac_address = (await rsp.json())[0]["MacAddressId"]
         _LOGGER.debug("MAC:", self._mac_address)
-        
+
         self.logged_in = True
         return True
 
@@ -132,7 +133,8 @@ class MagiQtouch_Driver:
     async def refresh_state(self, initial=False, process=True):
         headers = await self._get_auth()
         async with self._httpsession.put(
-            NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
+            NewWebApiUrl + f"devices/{self._mac_address}",
+            headers=headers,
             data=json.dumps(
                 {
                     "SerialNo": self._mac_address,
@@ -146,27 +148,31 @@ class MagiQtouch_Driver:
         if initial:
             # Get system details so we can see how many zones are in use.
             async with self._httpsession.get(
-                ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}", headers=headers
-                ) as rsp:
-                    if rsp.status == 401:
-                        raise UnauthorisedTokenException
-                    data = await rsp.json()
-                    new_system_state = SystemDetails.from_dict(data)
-                    self.current_system_state = new_system_state
-                    if self.verbose:
-                        _LOGGER.warn(f"Current System State: {json.dumps(self.current_system_state.__dict__)}")
-
-        async with self._httpsession.get(
-            ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}", headers=headers 
+                ApiUrl + f"loadsystemdetails?macAddressId={self._mac_address}",
+                headers=headers,
             ) as rsp:
                 if rsp.status == 401:
                     raise UnauthorisedTokenException
                 data = await rsp.json()
-                new_state = RemoteStatus.from_dict(data)
-                
-                if not process:
-                    return new_state
-                self.process_new_state(new_state)
+                new_system_state = SystemDetails.from_dict(data)
+                self.current_system_state = new_system_state
+                if self.verbose:
+                    _LOGGER.warn(
+                        f"Current System State: {json.dumps(self.current_system_state.__dict__)}"
+                    )
+
+        async with self._httpsession.get(
+            ApiUrl + f"loadsystemrunning?macAddressId={self._mac_address}",
+            headers=headers,
+        ) as rsp:
+            if rsp.status == 401:
+                raise UnauthorisedTokenException
+            data = await rsp.json()
+            new_state = RemoteStatus.from_dict(data)
+
+            if not process:
+                return new_state
+            self.process_new_state(new_state)
 
     async def wait_for_new_state(self, checker):
         while new_state := await self.refresh_state(process=False):
@@ -210,9 +216,17 @@ class MagiQtouch_Driver:
         data.IAOCRunning = state.IAOCRunning
         data.IAOCTemp = state.IAOCSetTemp
         for zone in range(10):
-            setattr(data, f"OnOffZone{zone + 1}", getattr(state, f"OnOffZone{zone + 1}"))
-            setattr(data, f"TempZone{zone + 1}", getattr(state, f"SetTempZone{zone + 1}"))
-            setattr(data, f"Override{zone + 1}", getattr(state, f"ProgramModeOverriddenZone{zone + 1}"))
+            setattr(
+                data, f"OnOffZone{zone + 1}", getattr(state, f"OnOffZone{zone + 1}")
+            )
+            setattr(
+                data, f"TempZone{zone + 1}", getattr(state, f"SetTempZone{zone + 1}")
+            )
+            setattr(
+                data,
+                f"Override{zone + 1}",
+                getattr(state, f"ProgramModeOverriddenZone{zone + 1}"),
+            )
 
         # Could/should do a get fw version pub/sub to have values to fill these with
         # CC3200FW_Major = state.CC3200FW_Major
@@ -243,9 +257,10 @@ class MagiQtouch_Driver:
 
             headers = await self._get_auth()
             async with self._httpsession.put(
-                NewWebApiUrl + f"devices/{self._mac_address}", headers=headers,
+                NewWebApiUrl + f"devices/{self._mac_address}",
+                headers=headers,
                 data=jdata,
-                ) as rsp:
+            ) as rsp:
                 _LOGGER.debug(f"Update response received: {rsp.json()}")
             if self.verbose:
                 _LOGGER.warn("Sent: %s" % jdata)
@@ -255,6 +270,7 @@ class MagiQtouch_Driver:
             return True
         except Exception as ex:
             import traceback
+
             _LOGGER.error(f"Failed to set value properly: {ex}")
         return False
 
@@ -264,10 +280,13 @@ class MagiQtouch_Driver:
         await self._send_remote_props(checker=checker)
 
     async def set_zone_state(self, zone_index, is_on):
-        """ Turns a specific zone on and off. """
+        """Turns a specific zone on and off."""
         on_state = 1 if is_on else 0
         setattr(self.current_state, self.get_on_off_zone_name(zone_index), on_state)
-        checker = lambda state: getattr(state, self.get_on_off_zone_name(zone_index)) == on_state
+        checker = (
+            lambda state: getattr(state, self.get_on_off_zone_name(zone_index))
+            == on_state
+        )
         await self._send_remote_props(checker=checker)
 
     async def set_fan_only(self):
@@ -275,22 +294,19 @@ class MagiQtouch_Driver:
         self.current_state.CFanOnlyOrCool = 1
         self.current_state.HFanOnly = 1
         checker = lambda state: (
-            state.SystemOn == 1 and (
-                state.CFanOnlyOrCool == 1 or 
-                state.HFanOnly == 1
-            )
+            state.SystemOn == 1 and (state.CFanOnlyOrCool == 1 or state.HFanOnly == 1)
         )
         await self._send_remote_props(checker=checker)
 
     async def set_fan_only_evap(self):
         self.current_state.EvapCRunning = 1
-        #self.current_state.CFanOnlyOrCool = 1
+        # self.current_state.CFanOnlyOrCool = 1
         self.current_state.HRunning = 0
         await self.set_fan_only()
 
     async def set_fan_only_heater(self):
         self.current_state.EvapCRunning = 0
-        #self.current_state.CFanOnlyOrCool = 0
+        # self.current_state.CFanOnlyOrCool = 0
         self.current_state.HRunning = 1
         await self.set_fan_only()
 
@@ -307,10 +323,10 @@ class MagiQtouch_Driver:
         self.current_state.HFanOnly = 0
         self.current_state.HRunning = 1
         self.current_state.EvapCRunning = 0
+
         def checker(state):
-            return state.HFanOnly == 0 and \
-                   state.SystemOn == 1 and \
-                   state.HRunning == 1
+            return state.HFanOnly == 0 and state.SystemOn == 1 and state.HRunning == 1
+
         await self._send_remote_props(checker=checker)
 
     async def set_cooling_by_temperature(self):
@@ -326,9 +342,10 @@ class MagiQtouch_Driver:
         self.current_state.CFanOnlyOrCool = 0
         self.current_state.HRunning = 0
         self.current_state.EvapCRunning = 1
+
         def checker(state):
-            return state.CFanOnlyOrCool == 0 and \
-                   state.SystemOn == 1
+            return state.CFanOnlyOrCool == 0 and state.SystemOn == 1
+
         await self._send_remote_props(checker=checker)
 
     async def set_aoc_by_temperature(self):
@@ -345,8 +362,8 @@ class MagiQtouch_Driver:
         self.current_state.HRunning = 0
         self.current_state.EvapCRunning = 0
         change = [
-            ("SystemOn", 1), 
-            ("CFanOnlyOrCool", 0), 
+            ("SystemOn", 1),
+            ("CFanOnlyOrCool", 0),
             ("HRunning", 0),
         ]
         if self.current_system_state.AOCFixedInSystem:
@@ -355,11 +372,11 @@ class MagiQtouch_Driver:
         elif self.current_system_state.AOCInverterInSystem:
             self.current_state.IAOCRunning = 1
             change.append(("IAOCRunning", 1))
-        
+
         def checker(state):
             nonlocal change
             return all((getattr(state, f) == v for f, v in change))
-        
+
         await self._send_remote_props(checker=checker)
 
     async def set_current_speed(self, speed):
@@ -416,6 +433,7 @@ def main():
     )
 
     import sys
+
     print(sys.argv)
     args = parser.parse_args()
     user = args.email
@@ -434,6 +452,7 @@ def main():
     print("Current State:")
     print(str(m.current_state))
     print("")
+
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@
 
 DOMAIN = "magiqtouch"
 
-FAN_MIN = 'min'
-FAN_MAX = 'max'
+FAN_MIN = "min"
+FAN_MAX = "max"
 
 CONF_VERBOSE = "log_json"

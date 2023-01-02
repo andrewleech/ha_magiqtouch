@@ -14,10 +14,12 @@ _LOGGER = logging.getLogger(__name__)
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
-STEP_USER_DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_USERNAME): str, 
-    vol.Required(CONF_PASSWORD): str,
-})
+STEP_USER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+    }
+)
 
 
 async def validate_input(hass: core.HomeAssistant, data):
@@ -38,8 +40,9 @@ async def validate_input(hass: core.HomeAssistant, data):
             raise InvalidAuth
     except Exception as e:
         import traceback
+
         trace_text = traceback.format_exc()
-        _LOGGER.error(f"Could not connect: {str(e)} {trace_text}"	)
+        _LOGGER.error(f"Could not connect: {str(e)} {trace_text}")
         if "InvalidSignatureException" in trace_text:
             raise InvalidTime
         raise CannotConnect
@@ -115,12 +118,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ),
         )
 
+
 class CannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""
 
 
 class InvalidAuth(exceptions.HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
 
 class InvalidTime(exceptions.HomeAssistantError):
     """Error to indicate auth failed due to incorrect system time."""
