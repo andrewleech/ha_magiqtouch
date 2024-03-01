@@ -233,25 +233,34 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        """Can not report temperature, so return target_temperature."""
+        """Report current temperature."""
         return self.controller.current_state.InternalTemp
 
     @property
     def target_temperature(self):
-        """Return the temperature we try to reach."""
-        return self.controller.current_state.CTemp
+        """Return the temperature / speed we try to reach."""
+        if self.fan_mode == FAN_SPEED_BY_TEMP:
+            return self.controller.current_state.CTemp
+        else:
+            return int(self.fan_mode)
 
     @property
     def max_temp(self):
-        return self.controller.get_installed_device_config().get(
-            "MaximumTemperature", 35
-        )
+        if self.fan_mode == FAN_SPEED_BY_TEMP:
+            return self.controller.get_installed_device_config().get(
+                "MaximumTemperature", 35
+            )
+        else:
+            return 10
 
     @property
     def min_temp(self):
-        return self.controller.get_installed_device_config().get(
-            "MinimumTemperature", 7
-        )
+        if self.fan_mode == FAN_SPEED_BY_TEMP:
+            return self.controller.get_installed_device_config().get(
+                "MinimumTemperature", 7
+            )
+        else:
+            return 1
 
     @property
     def hvac_action(self):
