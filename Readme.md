@@ -28,12 +28,12 @@ Platform | Description
 
 ***
 
-[ha_magiqtouch]: https://gitlab.com/alelec/ha_magiqtouch
+[ha_magiqtouch]: https://github.com/andrewleech/ha_magiqtouch
 [hacs]: https://hacs.xyz
 [hacsbadge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
-[license]: https://github.com/custom-components/ha_magiqtouch/blob/main/LICENSE
-[license-shield]: https://img.shields.io/github/license/custom-components/ha_magiqtouch.svg?style=for-the-badge
+[license]: https://github.com/andrewleech/ha_magiqtouch/blob/hacs/LICENSE
+[license-shield]: https://img.shields.io/github/license/andrewleech/ha_magiqtouch.svg?style=for-the-badge
 [maintenance-shield]: https://img.shields.io/badge/maintainer-Andrew%20Leech%20%40alelec-blue.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/custom-components/ha_magiqtouch.svg?style=for-the-badge
-[releases]: https://github.com/custom-components/ha_magiqtouch/releases
+[releases-shield]: https://img.shields.io/github/release/andrewleech/ha_magiqtouch.svg?style=for-the-badge
+[releases]: https://github.com/andrewleech/ha_magiqtouch/releases
 [user_profile]: https://github.com/andrewleech
