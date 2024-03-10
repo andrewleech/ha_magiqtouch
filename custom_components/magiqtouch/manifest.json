@@ -1,9 +1,11 @@
 {
     "domain": "magiqtouch",
     "name": "Seeley MagIQtouch",
+    "codeowners": ["@andrewleech"],
     "config_flow": true,
-    "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
-    "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
     "dependencies": [],
-    "version": "3.0"
+    "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
+    "version": "2.0"
 }
