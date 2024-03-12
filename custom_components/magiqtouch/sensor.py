@@ -54,13 +54,13 @@ async def async_setup_entry(
         )
     )
 
-    if driver.current_device_state.external_temp is not None:
+    if driver.current_system_state.ExternalAirSensorPresent:
         sensors.append(
             TemperatureSensor(
                 "External Temperature",
                 driver,
                 coordinator,
-                data_callback=lambda: driver.current_device_state.internal_temp,
+                data_callback=lambda: driver.current_device_state.external_temp,
             )
         )
     # todo add zone temperature sensor etc
