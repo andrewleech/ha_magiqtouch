@@ -236,11 +236,10 @@ def flatten_dict(data, sep="_", parent_key="", result=None):
 
 @dataclass
 class Zone:
-    """
-    No attributes defined
-    as the Zones list is empty
-    in the provided data
-    """
+    Name: str
+    Type: str
+    CoolerCompatible: bool
+    HeaterCompatible: bool
 
 
 @dataclass
