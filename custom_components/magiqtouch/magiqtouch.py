@@ -187,6 +187,7 @@ class MagiQtouch_Driver:
         token = await self._get_token()
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
         # async with aiohttp.ClientSession(trust_env=True) as session:
+        counter = 0
         try:
             async with self.httpsession.ws_connect(
                 WebsocketUrl + token,
@@ -199,11 +200,9 @@ class MagiQtouch_Driver:
                 await ws.send_str(message)
                 # json.dumps({"action": "status", "params": {"device": self._mac_address}})
                 # )
-                counter = 0
                 connected_time = time.time()
                 while msg := await asyncio.wait_for(ws.receive(), SCAN_INTERVAL.total_seconds()):
                     counter += 1
-                    _LOGGER.warning(f"websocket {counter}")
                     if (time.time() - connected_time) > (45 * 60):
                         # cognito auth token lasts (default) 1 hour.
                         # re-start websocket before we get too close to this.
@@ -232,10 +231,12 @@ class MagiQtouch_Driver:
                                 self.process_new_state(status)
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         break
+        except asyncio.TimeoutError:
+            _LOGGER.info(f"websocket timeout after {counter} messages.")
         except:
             _LOGGER.exception("websocket")
         self.ws = None
-        _LOGGER.warning("websocket has closed")
+        _LOGGER.info("websocket has closed")
 
     async def logout(self):
         # TODO does an actually logout help?
