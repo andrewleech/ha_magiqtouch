@@ -145,6 +145,7 @@ class MagiQtouch_Driver:
         ## Get system data & MACADDRESS
         try:
             headers = await self._get_auth(self._IdToken)
+            redacted = None
             async with self.httpsession.get(
                 ApiUrl + "devices/system",
                 headers=headers,  # {"Authorization": self._cognito.id_token},
@@ -161,6 +162,8 @@ class MagiQtouch_Driver:
 
         except Exception:
             _LOGGER.exception("failed to query devices/system")
+            if redacted:
+                _LOGGER.error(f"Current System State: {json.dumps(redacted)}")
             raise
 
         self.logged_in = True
