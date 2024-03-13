@@ -91,7 +91,10 @@ async def async_setup_entry(
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
     coordinator: MagiQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
-    if True or driver.current_system_state.NoOfZoneControls == 0:
+    # todo remove - disable zones for now
+    driver.current_system_state.NoOfZoneControls = 0
+
+    if driver.current_system_state.NoOfZoneControls == 0:
         # No zones, just the one system entity
         async_add_entities([MagiQtouch(entry.entry_id, driver, coordinator)], False)
     else:
