@@ -45,14 +45,16 @@ async def async_setup_entry(
 
     sensors = []
 
-    sensors.append(
+    sensors = [
         TemperatureSensor(
             "Internal Temperature",
             driver,
             coordinator,
-            data_callback=lambda: driver.current_device_state.internal_temp,
+            zone=zone,
+            data_callback=lambda z: driver.current_device_state(z).internal_temp,
         )
-    )
+        for zone in driver.zone_list
+    ]
 
     if driver.current_system_state.ExternalAirSensorPresent:
         sensors.append(
@@ -60,7 +62,7 @@ async def async_setup_entry(
                 "External Temperature",
                 driver,
                 coordinator,
-                data_callback=lambda: driver.current_device_state.external_temp,
+                data_callback=lambda z: driver.current_device_state(z).external_temp,
             )
         )
     # todo add zone temperature sensor etc
@@ -74,7 +76,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         controller: MagiQtouch_Driver,
         coordinator: MagiQtouchCoordinator,
         data_callback,
-        zone_id=None,
+        zone=None,
     ):
         super().__init__(coordinator)
         self.label = label
@@ -84,7 +86,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self.data_callback = data_callback
-        self.zone_id = zone_id
+        self.zone = zone
 
         self._attr_native_value = 0
         self._attr_available = False
@@ -94,7 +96,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Handle updated data from the coordinator."""
         # self._attr_is_on = self.coordinator.data[self.idx]["state"]
         _LOGGER.debug("coordinator updated")
-        self._attr_native_value = self.data_callback()
+        self._attr_native_value = self.data_callback(self.zone)
         self._attr_available = True
         self.async_write_ha_state()
 
@@ -103,8 +105,8 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Return the unique ID for this sensor."""
         mac = self.controller.current_state.device
         uid = f"{mac}-temperature-{self.label}"
-        if self.controller.current_system_state.NoOfZoneControls > 0:
-            uid += f"-zone{self.zone_id + 1}"
+        if self.zone:
+            uid += f"-zone-{self.zone.replace(' ', '-')}"
         return uid
 
     # @property

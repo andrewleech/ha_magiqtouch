@@ -62,6 +62,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
 
     await driver.login(hass)
+    await driver.get_system_details()
+    await driver.full_refresh()
 
     # try:
     #     success = await driver.login(hass)
@@ -99,7 +101,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     if unload_ok:
         driver = hass.data[DOMAIN][entry.entry_id]["driver"]
-        driver.logout()
+        await driver.logout()
 
     return unload_ok
 

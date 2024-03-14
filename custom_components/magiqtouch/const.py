@@ -19,3 +19,19 @@ MODE_HEATER_FAN = "HEATER_FAN"
 
 CONTROL_MODE_FAN = "FAN"
 CONTROL_MODE_TEMP = "TEMP"  # todo check
+
+
+class ZoneType:
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        if isinstance(other, ZoneType):
+            return other is self
+        return other == self.name
+
+
+ZONE_TYPE_NONE = ZoneType("NONE")
+ZONE_TYPE_COMMON = ZoneType("COMMON")
+ZONE_TYPE_INDIVIDUAL = ZoneType("INDIVIDUAL")
+ZONE_TYPE_SLAVE = ZoneType("SLAVE")

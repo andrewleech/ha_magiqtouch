@@ -45,6 +45,7 @@ from .const import (
     MODE_HEATER,
     MODE_HEATER_FAN,
     CONTROL_MODE_TEMP,
+    ZONE_TYPE_COMMON,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -91,21 +92,9 @@ async def async_setup_entry(
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
     coordinator: MagiQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
-    # todo remove - disable zones for now
-    driver.current_system_state.NoOfZoneControls = 0
-
-    if driver.current_system_state.NoOfZoneControls == 0:
-        # No zones, just the one system entity
-        async_add_entities([MagiQtouch(entry.entry_id, driver, coordinator)], False)
-    else:
-        # create one entity per zone
-        async_add_entities(
-            [
-                MagiQtouch(entry.entry_id, driver, coordinator, i)
-                for i in range(driver.current_system_state.NoOfZoneControls)
-            ],
-            False,
-        )
+    async_add_entities(
+        [MagiQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list], False
+    )
 
 
 class MagiQtouch(CoordinatorEntity, ClimateEntity):
@@ -116,15 +105,13 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         entry_id,
         controller: MagiQtouch_Driver,
         coordinator: MagiQtouchCoordinator,
-        zone_id=None,
+        zone=None,
     ):
         self._attr_name = "MagiQtouch"
         super().__init__(coordinator)
         self.controller = controller
-        self.zone_id = zone_id
+        self.zone = zone
         self.coordinator = coordinator
-        # Best guess: generally if this is true, this zone is a "common zone" of some kind.
-        self.zone_entity = zone_id is not None
         # https://developers.home-assistant.io/blog/2024/01/24/climate-climateentityfeatures-expanded/
         self._enable_turn_on_off_backwards_compatibility = False
 
@@ -145,18 +132,16 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def name(self):
         """Return the name of the device."""
-        return (
-            self.controller.get_zone_name(self.zone_id)
-            if self.controller.current_system_state.NoOfZoneControls > 0
-            else "MagiQtouch"
-        )
+        if self.zone:
+            return f"MagiQtouch - {self.controller.get_zone_name(self.zone)}"
+        return "MagiQtouch"
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
         uid = self.controller.current_state.device
-        if self.controller.current_system_state.NoOfZoneControls > 0:
-            uid += f"Zone{self.zone_id + 1}"
+        if self.zone:
+            uid += f"Zone-{self.zone.replace(' ', '-')}"
         return uid
 
     @property
@@ -175,32 +160,45 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        return self.controller.current_device_state.internal_temp
+        current = self.controller.current_device_state(self.zone).internal_temp
+        if current > 100:
+            # No sensor
+            try:
+                # report common zone if it exists
+                current = self.controller.current_device_state(ZONE_TYPE_COMMON).internal_temp
+            except:
+                current = self.target_temperature
+        return current
 
     @property
     def target_temperature(self):
         """Return the temperature we try to reach."""
-        return self.controller.current_device_state.set_temp
+        return self.controller.current_device_state(self.zone).set_temp
 
     @property
     def max_temp(self):
         try:
-            return self.controller.current_device_state.max_temp
+            return self.controller.current_device_state(self.zone).max_temp
         except:
             return 35
 
     @property
     def min_temp(self):
         try:
-            return self.controller.current_device_state.mim_temp
+            return self.controller.current_device_state(self.zone).mim_temp
         except:
             return 7
 
     async def async_turn_on(self):
         await self.controller.set_on()
+        if self.zone:
+            await self.controller.set_zone_state(self.zone, True)
 
     async def async_turn_off(self):
-        await self.controller.set_off()
+        if not self.zone:
+            await self.controller.set_off()
+        else:
+            await self.controller.set_zone_state(self.zone, False)
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -221,9 +219,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         # Show as off if individual zone is off
         # zone_on = getattr(
         #     self.controller.current_state,
-        #     self.controller.get_on_off_zone_name(self.zone_id),
+        #     self.controller.get_on_off_zone_name(self.zone),
         # )
-        # if self.zone_entity and not zone_on:
+        # if self.zone and not zone_on:
         #     _LOGGER.debug(HVACAction.OFF + " (zone)")
         #     return HVACAction.OFF
         runningMode = self.controller.current_state.runningMode
@@ -271,9 +269,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         # Show as off if individual zone is off
         # zone_on = getattr(
         #     self.controller.current_state,
-        #     self.controller.get_on_off_zone_name(self.zone_id),
+        #     self.controller.get_on_off_zone_name(self.zone),
         # )
-        # if self.zone_entity and not zone_on:
+        # if self.zone and not zone_on:
         #     _LOGGER.debug(f"hvac_mode: (individual zone) {HVACMode.OFF}")
         #     return HVACMode.OFF
 
@@ -314,10 +312,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         # but switching between heating vs fan mode applies only across the whole system.
         _LOGGER.debug("Set hvac_mode: %s" % hvac_mode)
         if hvac_mode == HVACMode.OFF:
-            if not self.zone_entity:
-                await self.controller.set_off()
-            else:
-                await self.controller.set_zone_state(self.zone_id, False)
+            await self.async_turn_off()
+
         elif hvac_mode == HVACMode.FAN_ONLY:
             await self.controller.set_fan_only()
         elif hvac_mode == HVACMode.COOL:
@@ -334,8 +330,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
         # If we're not turning anything off, and this isn't a "whole system" zone,
         # make sure this zone is on
-        if self.zone_id and hvac_mode != HVACMode.OFF:
-            await self.controller.set_zone_state(self.zone_id, True)
+        if self.zone and hvac_mode != HVACMode.OFF:
+            await self.controller.set_zone_state(self.zone, True)
 
         await self.coordinator.async_request_refresh()
 
@@ -347,10 +343,10 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def fan_mode(self):
         """Return the current fan modes."""
-        if self.controller.current_device_state.control_mode == CONTROL_MODE_TEMP:
+        if self.controller.current_device_state(self.zone).control_mode == CONTROL_MODE_TEMP:
             # running in temperature set point mode
             return FAN_SPEED_BY_TEMP
-        speed = str(self.controller.current_device_state.fan_speed)
+        speed = str(self.controller.current_device_state(self.zone).fan_speed)
         if speed == "0":
             return FAN_SPEED_BY_TEMP
         return speed
@@ -394,7 +390,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         elif runningMode == MODE_COOLER_FAN:
             return PRESET_FAN_FRESH
 
-        temperature_mode = self.controller.current_device_state.control_mode == CONTROL_MODE_TEMP
+        temperature_mode = (
+            self.controller.current_device_state(self.zone).control_mode == CONTROL_MODE_TEMP
+        )
         evap_cooling_mode = self.controller.current_state.runningMode == MODE_COOLER
         if evap_cooling_mode:
             if temperature_mode:

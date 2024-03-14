@@ -26,6 +26,9 @@ from .const import (
     MODE_HEATER_FAN,
     CONTROL_MODE_FAN,
     CONTROL_MODE_TEMP,
+    ZoneType,
+    ZONE_TYPE_NONE,
+    ZONE_TYPE_COMMON,
 )
 
 AWS_REGION = "ap-southeast-2"
@@ -62,6 +65,8 @@ class MagiQtouch_Driver:
 
         self.current_state: RemoteStatus = RemoteStatus()
         self.current_system_state: SystemDetails = SystemDetails()
+        self._zone_list = []
+
         self._update_listener = None
         self._update_listener_override = None
 
@@ -142,29 +147,6 @@ class MagiQtouch_Driver:
         self._AccessToken = self._cognito.access_token
         self._RefreshToken = self._cognito.refresh_token
         self._IdToken = self._cognito.id_token
-        ## Get system data & MACADDRESS
-        try:
-            headers = await self._get_auth(self._IdToken)
-            redacted = None
-            async with self.httpsession.get(
-                ApiUrl + "devices/system",
-                headers=headers,  # {"Authorization": self._cognito.id_token},
-            ) as rsp:
-                system_data = (await rsp.json())[0]
-                redacted = copy.deepcopy(system_data)
-                redacted["System"]["Address"] = "<redacted>"
-                redacted["Wifi_Module"]["MacAddressId"] = "<redacted>"
-                if self.verbose:
-                    _LOGGER.warning(f"Current System State: {json.dumps(redacted)}")
-                # parse the json into dataclass after its logged in case of errors
-                self.current_system_state = SystemDetails.from_dict(system_data)
-                self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
-
-        except Exception:
-            _LOGGER.exception("failed to query devices/system")
-            if redacted:
-                _LOGGER.error(f"Current System State: {json.dumps(redacted)}")
-            raise
 
         self.logged_in = True
         _LOGGER.info("Logged in")
@@ -178,12 +160,12 @@ class MagiQtouch_Driver:
 
     async def ws_handler(self, message):
         if self.ws and not self.ws.closed:
-            _LOGGER.warning("using existing websocket")
+            _LOGGER.info("using existing websocket")
             await self.ws.send_str(message)
 
             return
 
-        _LOGGER.warning("websocket start")
+        _LOGGER.info("websocket start")
         token = await self._get_token()
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
         # async with aiohttp.ClientSession(trust_env=True) as session:
@@ -224,10 +206,10 @@ class MagiQtouch_Driver:
                             status = RemoteStatus.from_dict(data)
                             # _LOGGER.info(f"ws: {str(status)}")
                             if self.waiting_for_state:
-                                _LOGGER.warning("state on queue")
+                                _LOGGER.info("state on queue")
                                 await self.state_queue.put(status)
                             else:
-                                _LOGGER.warning("state processed")
+                                _LOGGER.info("state processed")
                                 self.process_new_state(status)
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         break
@@ -242,6 +224,31 @@ class MagiQtouch_Driver:
         # TODO does an actually logout help?
         await self.shutdown()
         # todo is this called by HA
+
+    async def get_system_details(self):
+        ## Get system data & MACADDRESS
+        try:
+            headers = await self._get_auth(self._IdToken)
+            redacted = None
+            async with self.httpsession.get(
+                ApiUrl + "devices/system",
+                headers=headers,  # {"Authorization": self._cognito.id_token},
+            ) as rsp:
+                system_data = (await rsp.json())[0]
+                redacted = copy.deepcopy(system_data)
+                redacted["System"]["Address"] = "<redacted>"
+                redacted["Wifi_Module"]["MacAddressId"] = "<redacted>"
+                if self.verbose:
+                    _LOGGER.warning(f"Current System State: {json.dumps(redacted)}")
+                # parse the json into dataclass after its logged in case of errors
+                self.current_system_state = SystemDetails.from_dict(system_data)
+                self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
+
+        except Exception:
+            _LOGGER.exception("failed to query devices/system")
+            if redacted:
+                _LOGGER.error(f"Current System State: {json.dumps(redacted)}")
+            raise
 
     async def _get_token(self):
         await self._cognito.check_token(renew=True)
@@ -317,7 +324,7 @@ class MagiQtouch_Driver:
             "params": state.to_dict(),
         }
         # todo zone support
-        data["params"]["selectedZone"] = 0
+        # data["params"]["selectedZone"] = 0
 
         # for zone in range(10):
         #     setattr(
@@ -384,17 +391,40 @@ class MagiQtouch_Driver:
             self.waiting_for_state -= 1
         return success
 
-    def active_device(self, state):
-        # todo zone support here?
-        if state.runningMode in (MODE_COOLER, MODE_COOLER_FAN, MODE_COOLER_AOC):
-            return state.cooler[0]
-        elif state.runningMode in (MODE_HEATER, MODE_HEATER_FAN):
-            return state.heater[0]
-        else:
-            return UnitDetails()
-
     @property
-    def current_device_state(self):
+    def zone_list(self):
+        if not self._zone_list:
+            if self.current_system_state.NoOfZoneControls == 0:
+                return [None]
+            self._zone_list = []
+            zones = set()  # Use set to provide de-duplication
+            for d in self.current_state.cooler + self.current_state.heater:
+                if d.zoneType == ZONE_TYPE_COMMON:
+                    self._zone_list = [ZONE_TYPE_COMMON]
+                else:
+                    zones.add(d.name)
+            self._zone_list.extend(list(zones))
+        return self._zone_list
+
+    def active_device(self, state, zone=None):
+        match = lambda d: (
+            d.zoneType == zone
+            if isinstance(zone, ZoneType)
+            else d.name == zone
+            if isinstance(zone, str)
+            else True
+        )
+        if state.runningMode in (MODE_COOLER, MODE_COOLER_FAN, MODE_COOLER_AOC):
+            for dev in state.cooler:
+                if match(dev):
+                    return dev
+        elif state.runningMode in (MODE_HEATER, MODE_HEATER_FAN):
+            for dev in state.heater:
+                if match(dev):
+                    return dev
+        return UnitDetails()
+
+    def current_device_state(self, zone=None):
         return self.active_device(self.current_state)
 
     async def set_off(self):
@@ -407,12 +437,22 @@ class MagiQtouch_Driver:
         checker = lambda state: bool(state.systemOn)
         await self._send_remote_props(checker=checker)
 
-    async def set_zone_state(self, zone_index, is_on):
+    async def set_zone_state(self, zone, is_on):
         """Turns a specific zone on and off."""
         # todo zone support
-        on_state = 1 if is_on else 0
-        setattr(self.current_state, self.get_on_off_zone_name(zone_index), on_state)
-        checker = lambda state: getattr(state, self.get_on_off_zone_name(zone_index)) == on_state
+        device = self.current_device_state(zone)
+        on_state = True if is_on else None
+        device.zoneOn = on_state
+        checker = lambda state: self.active_device(state, zone).zoneOn == on_state
+        if is_on:
+            # if any zone is on, system needs to be on
+            self.current_state.systemOn = True
+        else:
+            # if all zones are off, turn off system
+            all_dev = self.current_state.cooler + self.current_state.heater
+            if not [d for d in all_dev if d.zoneOn]:
+                self.current_state.systemOn = False
+
         await self._send_remote_props(checker=checker)
 
     async def set_fan_only(self):
@@ -519,26 +559,27 @@ class MagiQtouch_Driver:
 
         await self._send_remote_props(checker=checker)
 
-    async def set_current_speed(self, speed):
-        # todo zone support here?
+    async def set_current_speed(self, speed, zone=ZONE_TYPE_NONE):
         speed = int(speed)
-        self.current_device_state.fan_speed = speed
-        checker = lambda state: self.active_device(state).fan_speed == speed
+        self.current_device_state(zone).fan_speed = speed
+        checker = lambda state: self.active_device(state, zone).fan_speed == speed
         await self._send_remote_props(checker=checker)
 
-    async def set_temperature(self, new_temp):
-        # todo zone support here?
+    async def set_temperature(self, new_temp, zone=ZONE_TYPE_NONE):
         new_temp = int(new_temp)
-        self.current_device_state.set_temp = new_temp
-        checker = lambda state: self.active_device(state).set_temp == new_temp
+        self.current_device_state(zone).set_temp = new_temp
+        checker = lambda state: self.active_device(state, zone).set_temp == new_temp
         await self._send_remote_props(checker=checker)
 
     def get_on_off_zone_name(self, zone_index):
         return f"OnOffZone{zone_index + 1}"
 
-    def get_zone_name(self, zone_index):
-        # todo zone
-        return getattr(self.current_system_state, f"ZoneName{zone_index + 1}")
+    def get_zone_name(self, zone):
+        if not zone:
+            return ""
+        if isinstance(zone, ZoneType):
+            return zone.name
+        return zone
 
     # def get_installed_device_config(self):
     #     # todo update attrs or delete function
