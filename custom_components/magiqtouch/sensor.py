@@ -104,9 +104,11 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
         mac = self.controller.current_state.device
-        uid = f"{mac}-temperature-{self.label}"
+        zone_label = ""
         if self.zone:
-            uid += f"-zone-{self.zone.replace(' ', '-')}"
+            zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
+            zone_label = f"-zone-{zone_name}"
+        uid = f"{mac}{zone_label}-sensor-{self.label}"
         return uid
 
     # @property

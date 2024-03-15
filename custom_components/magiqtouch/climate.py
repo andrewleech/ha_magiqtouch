@@ -141,7 +141,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return the unique ID for this sensor."""
         uid = self.controller.current_state.device
         if self.zone:
-            uid += f"Zone-{self.zone.replace(' ', '-')}"
+            zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
+            uid += f"-zone-{zone_name}"
         return uid
 
     @property
