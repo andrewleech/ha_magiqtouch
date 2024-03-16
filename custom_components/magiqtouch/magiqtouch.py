@@ -413,7 +413,7 @@ class MagiQtouch_Driver:
     def zone_list(self):
         if not self._zone_list:
             if self.current_system_state.NoOfZoneControls == 0:
-                return [None]
+                return [ZONE_TYPE_NONE]
             self._zone_list = []
             zones = set()  # Use set to provide de-duplication
             for d in self.current_state.cooler + self.current_state.heater:
