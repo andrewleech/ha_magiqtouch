@@ -61,19 +61,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
 
-    await driver.login(hass)
-    await driver.get_system_details()
-    await driver.full_refresh()
+    await driver.startup(hass)
 
-    # try:
-    #     success = await driver.login(hass)
-    #     if not success:
-    #         raise ConfigEntryNotReady
-    # except Exception as exception:
-    #     raise ConfigEntryNotReady from exception
-
-    # await driver.login(hass)
-    # await driver.initial_refresh()
     # await coordinator.async_config_entry_first_refresh()
 
     for component in PLATFORMS:

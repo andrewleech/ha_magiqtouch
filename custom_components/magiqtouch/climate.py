@@ -16,6 +16,7 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
+    UnitOfTemperature,
 )
 from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
@@ -32,7 +33,6 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
     PRECISION_WHOLE,
-    TEMP_CELSIUS,
 )
 from .const import (
     # ATTR_IDENTIFIERS,
@@ -148,7 +148,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement that is used."""
-        return TEMP_CELSIUS
+        return UnitOfTemperature.CELSIUS
 
     @property
     def precision(self):
@@ -262,6 +262,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_mode(self):
         """Return the current operation mode."""
+        # todo zone
+
         on = self.controller.current_state.systemOn
         if not on:
             _LOGGER.debug(f"hvac_mode: {HVACMode.OFF}")
@@ -290,7 +292,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_modes(self):
         """Return the list of available operation modes."""
-
+        # todo zone_on
         modes = [HVACMode.OFF, HVACMode.FAN_ONLY]
         system = self.controller.current_system_state.System
         if system.heater.available:
@@ -411,6 +413,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return a list of available preset modes.
         Requires SUPPORT_PRESET_MODE.
         """
+        # todo zone
+
         presets = [PRESET_NONE]
         sys_state = self.controller.current_system_state
         if sys_state.Heater.InSystem:

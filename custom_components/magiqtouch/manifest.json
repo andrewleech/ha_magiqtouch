@@ -7,5 +7,6 @@
     "documentation": "https://gitlab.com/alelec/ha_magiqtouch",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://gitlab.com/alelec/ha_magiqtouch/-/issues",
+    "loggers": ["custom_components.magiqtouch", "magiqtouch"],
     "version": "4.0"
 }
