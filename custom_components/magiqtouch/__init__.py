@@ -59,7 +59,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         driver=driver,
         coordinator=coordinator,
     )
-    driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
+    # todo enable this again
+    # driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
 
     await driver.startup(hass)
 
