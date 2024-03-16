@@ -126,7 +126,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         return (
             self.controller.logged_in
             and self.controller.ws is not None
-            and self.controller.current_state.runningMode is not None
+            and bool(self.controller.current_state.runningMode)
         )
 
     @property
@@ -207,7 +207,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        await self.controller.set_temperature(temperature)
+        await self.controller.set_temperature(temperature, zone=self.zone)
 
     @property
     def hvac_action(self):
@@ -216,15 +216,13 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.debug(HVACAction.OFF)
             return HVACAction.OFF
 
-        ## todo zones
         # Show as off if individual zone is off
-        # zone_on = getattr(
-        #     self.controller.current_state,
-        #     self.controller.get_on_off_zone_name(self.zone),
-        # )
-        # if self.zone and not zone_on:
-        #     _LOGGER.debug(HVACAction.OFF + " (zone)")
-        #     return HVACAction.OFF
+        if self.zone:
+            zone_on = self.controller.get_zone_state(self.zone)
+            if not zone_on:
+                _LOGGER.debug(HVACAction.OFF + " (zone)")
+                return HVACAction.OFF
+
         runningMode = self.controller.current_state.runningMode
         hvac_action = {
             MODE_COOLER: HVACAction.COOLING,
@@ -234,30 +232,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         }.get(runningMode, HVACAction.IDLE)
 
         _LOGGER.debug("runningMode: %s, hvac_action: %s", runningMode, hvac_action)
-        return hvac_action
 
-        # if (
-        #     self.controller.current_state.HActualGasRate > 0
-        #     and self.controller.current_state.HActualFanSpeed > 0
-        # ):
-        #     return HVACAction.HEAT
-        # elif (
-        #     self.controller.current_state.HFanOnly == 1
-        #     and self.controller.current_state.HActualFanSpeed > 0
-        #     and self.controller.current_state.HFanSpeed > 0
-        # ) or self.controller.current_state.CFanOnlyOrCool == 1:
-        #     return HVACAction.FAN
-        # elif (
-        #     self.controller.current_state.FAOCActualCompressorON == 1
-        #     or self.controller.current_state.IAOCCompressorON == 1
-        #     or (
-        #         self.controller.current_state.EvapCRunning
-        #         and self.controller.current_state.PumpStatus
-        #     )
-        # ):
-        #     return HVACAction.COOL
-        # else:
-        #     return HVACAction.IDLE
+        # if hvac_action not in self.hvac_actions:
+        #     _LOGGER.warning("hvac_action not sorted by zone, returning idle")
+        #     hvac_action = HVACAction.IDLE
+
+        return hvac_action
 
     @property
     def hvac_mode(self):
@@ -294,10 +274,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return the list of available operation modes."""
         # todo zone_on
         modes = [HVACMode.OFF, HVACMode.FAN_ONLY]
-        system = self.controller.current_system_state.System
-        if system.heater.available:
+        # system = self.controller.current_system_state.System
+        coolers = self.controller.available_coolers(self.zone)
+        heaters = self.controller.available_heaters(self.zone)
+        if heaters:
             modes.append(HVACMode.HEAT)
-        if system.cooler.available:
+        if coolers:
             modes.append(HVACMode.COOL)
 
         # if (
@@ -318,7 +300,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             await self.async_turn_off()
 
         elif hvac_mode == HVACMode.FAN_ONLY:
-            await self.controller.set_fan_only()
+            await self.controller.set_fan_only(self.zone)
         elif hvac_mode == HVACMode.COOL:
             if (
                 self.controller.current_state.installed.faoc
@@ -326,9 +308,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             ):
                 await self.controller.set_add_on_cooler()
             else:
-                await self.controller.set_cooling()
+                await self.controller.set_cooling(self.zone)
         elif hvac_mode == HVACMode.HEAT:
-            await self.controller.set_heating()
+            await self.controller.set_heating(self.zone)
         else:
             _LOGGER.warning("Unknown hvac_mode: %s" % hvac_mode)
         # If we're not turning anything off, and this isn't a "whole system" zone,
@@ -360,9 +342,9 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         else:
             _LOGGER.debug("Set fan to: %s" % fan_mode)
             if fan_mode == FAN_SPEED_BY_TEMP:
-                await self.controller.set_cooling_by_temperature()
+                await self.controller.set_cooling_by_temperature(self.zone)
             elif fan_mode == FAN_SPEED_TO_PREV:
-                await self.controller.set_cooling_by_speed()
+                await self.controller.set_cooling_by_speed(self.zone)
             else:
                 await self.controller.set_current_speed(fan_mode)
 
@@ -449,21 +431,21 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     async def async_set_preset_mode(self, preset_mode):
         """Set new preset mode."""
         if preset_mode == PRESET_FAN_FRESH:
-            await self.controller.set_fan_only_evap()
+            await self.controller.set_fan_only_evap(self.zone)
         elif preset_mode == PRESET_FAN_RECIRC:
-            await self.controller.set_fan_only_heater()
+            await self.controller.set_fan_only_heater(self.zone)
         elif preset_mode == PRESET_EVAP_TEMP:
-            await self.controller.set_cooling_by_temperature()
+            await self.controller.set_cooling_by_temperature(self.zone)
         elif preset_mode == PRESET_EVAP_FAN_SPEED:
-            await self.controller.set_cooling_by_speed()
+            await self.controller.set_cooling_by_speed(self.zone)
         elif preset_mode == PRESET_HEAT_TEMP:
-            await self.controller.set_heating_by_temperature()
+            await self.controller.set_heating_by_temperature(self.zone)
         elif preset_mode == PRESET_HEAT_FAN_SPEED:
-            await self.controller.set_heating_by_speed()
+            await self.controller.set_heating_by_speed(self.zone)
         elif preset_mode == PRESET_COOL_TEMP:
-            await self.controller.set_aoc_by_temperature()
+            await self.controller.set_aoc_by_temperature(self.zone)
         elif preset_mode == PRESET_COOL_FAN_SPEED:
-            await self.controller.set_aoc_by_speed()
+            await self.controller.set_aoc_by_speed(self.zone)
         elif preset_mode == PRESET_NONE:
             await self.async_set_hvac_mode(HVACMode.OFF)
         # self._thermostat.mode = HA_TO_EQ_PRESET[preset_mode]
