@@ -2,7 +2,7 @@ import logging
 
 from . import MagiQtouchCoordinator
 from .magiqtouch import MagiQtouch_Driver
-
+from .const import ZONE_TYPE_NONE
 from typing import Callable, List
 
 
@@ -105,7 +105,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Return the unique ID for this sensor."""
         mac = self.controller.current_state.device
         zone_label = ""
-        if self.zone:
+        if self.zone and self.zone != ZONE_TYPE_NONE:
             zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
             zone_label = f"-zone-{zone_name}"
         uid = f"{mac}{zone_label}-sensor-{self.label}"

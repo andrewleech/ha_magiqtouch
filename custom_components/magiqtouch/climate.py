@@ -46,6 +46,7 @@ from .const import (
     MODE_HEATER_FAN,
     CONTROL_MODE_TEMP,
     ZONE_TYPE_COMMON,
+    ZONE_TYPE_NONE,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -140,7 +141,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
         uid = self.controller.current_state.device
-        if self.zone:
+        if self.zone and self.zone != ZONE_TYPE_NONE:
             zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
             uid += f"-zone-{zone_name}"
         return uid
