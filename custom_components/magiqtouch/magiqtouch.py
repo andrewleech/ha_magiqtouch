@@ -449,6 +449,9 @@ class MagiQtouch_Driver:
             for dev in state.heater:
                 if self.zone_match(dev, zone):
                     return dev
+        else:
+            _LOGGER.error(f"active device unknown mode: {state.runningMode}")
+            raise ValueError(f"active device unknown mode: {state}")
         _LOGGER.error(f"No active devices found for zone: {zone}")
         return UnitDetails()
 
