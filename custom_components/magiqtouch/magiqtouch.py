@@ -452,7 +452,7 @@ class MagiQtouch_Driver:
         else:
             _LOGGER.error(f"active device unknown mode: {state.runningMode}")
             raise ValueError(f"active device unknown mode: {state}")
-        _LOGGER.error(f"No active devices found for zone: {zone}")
+        raise ValueError(f"No active devices found for zone '{zone}' in state: {state}")
         return UnitDetails()
 
     def current_device_state(self, zone=ZONE_TYPE_NONE):
