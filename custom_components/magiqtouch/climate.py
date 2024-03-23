@@ -76,8 +76,8 @@ FAN_SPEEDS = [FAN_SPEED_BY_TEMP, FAN_SPEED_TO_PREV] + [str(spd + 1) for spd in r
 
 PRESET_FAN_FRESH = "Fan: Fresh Air"
 PRESET_FAN_RECIRC = "Fan: Recirculate"
-PRESET_EVAP_TEMP = "Evaporative: set temperature"
-PRESET_EVAP_FAN_SPEED = "Evaporative: set fan speed"
+# PRESET_EVAP_TEMP = "Evaporative: set temperature"
+# PRESET_EVAP_FAN_SPEED = "Evaporative: set fan speed"
 PRESET_HEAT_TEMP = "Heating: set temperature"
 PRESET_HEAT_FAN_SPEED = "Heating: set fan speed"
 PRESET_COOL_TEMP = "Cooling: set temperature"
@@ -303,13 +303,13 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         elif hvac_mode == HVACMode.FAN_ONLY:
             await self.controller.set_fan_only(self.zone)
         elif hvac_mode == HVACMode.COOL:
-            if (
-                self.controller.current_state.installed.faoc
-                or self.controller.current_state.installed.iaoc
-            ):
-                await self.controller.set_add_on_cooler()
-            else:
-                await self.controller.set_cooling(self.zone)
+            # if (
+            #     self.controller.current_state.installed.faoc
+            #     or self.controller.current_state.installed.iaoc
+            # ):
+            #     await self.controller.set_add_on_cooler()
+            # else:
+            await self.controller.set_cooling(self.zone)
         elif hvac_mode == HVACMode.HEAT:
             await self.controller.set_heating(self.zone)
         else:
@@ -379,13 +379,13 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         temperature_mode = (
             self.controller.current_device_state(self.zone).control_mode == CONTROL_MODE_TEMP
         )
-        evap_cooling_mode = self.controller.current_state.runningMode == MODE_COOLER
-        if evap_cooling_mode:
+        cooling_mode = self.controller.current_state.runningMode == MODE_COOLER
+        if cooling_mode:
             if temperature_mode:
-                return PRESET_EVAP_TEMP
-            return PRESET_EVAP_FAN_SPEED
-        heating_running = self.controller.current_state.runningMode == MODE_HEATER
-        if heating_running:
+                return PRESET_COOL_TEMP
+            return PRESET_COOL_FAN_SPEED
+        heating_mode = self.controller.current_state.runningMode == MODE_HEATER
+        if heating_mode:
             if temperature_mode:
                 return PRESET_HEAT_TEMP
             return PRESET_HEAT_FAN_SPEED
@@ -396,37 +396,26 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return a list of available preset modes.
         Requires SUPPORT_PRESET_MODE.
         """
-        # todo zone
-
         presets = [PRESET_NONE]
-        sys_state = self.controller.current_system_state
-        if sys_state.Heater.InSystem:
-            presets.extend(
-                [
-                    PRESET_HEAT_TEMP,
-                    PRESET_HEAT_FAN_SPEED,
-                    PRESET_FAN_RECIRC,
-                ]
-            )
-            # todo was previously:
-            # if sys_state.Heater.get("AOCInstalled", 0) > 0:
-            if sys_state.AOCFixed.InSystem or sys_state.AOCInverter.InSystem:
-                presets.extend(
-                    [
-                        PRESET_COOL_TEMP,
-                        PRESET_COOL_FAN_SPEED,
-                    ]
-                )
-        # todo: figure better evap detection
-        # self.controller.current_state.installed.evap:
-        if sys_state.System.cooler.available:
-            presets.extend(
-                [
-                    PRESET_EVAP_TEMP,
-                    PRESET_EVAP_FAN_SPEED,
-                    PRESET_FAN_FRESH,
-                ]
-            )
+        cur_state = self.controller.current_state
+        # sys_state = self.controller.current_system_state
+        # if sys_state.Heater.InSystem:
+        if self.controller.available_heaters(self.zone):
+            presets.append(PRESET_HEAT_TEMP)
+            presets.append(PRESET_HEAT_FAN_SPEED)
+            if cur_state.fan.heater_available:
+                presets.append(PRESET_FAN_RECIRC)
+
+        # todo AOC
+        # if sys_state.Heater.get("AOCInstalled", 0) > 0:
+        # if sys_state.System.cooler.available or sys_state.AOCFixed.InSystem
+        #        or sys_state.AOCInverter.InSystem:
+        if self.controller.available_coolers(self.zone):
+            presets.append(PRESET_COOL_TEMP)
+            presets.append(PRESET_COOL_FAN_SPEED)
+            if cur_state.fan.cooler_available:
+                presets.append(PRESET_FAN_FRESH)
+
         return presets
 
     async def async_set_preset_mode(self, preset_mode):
@@ -435,18 +424,18 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             await self.controller.set_fan_only_evap(self.zone)
         elif preset_mode == PRESET_FAN_RECIRC:
             await self.controller.set_fan_only_heater(self.zone)
-        elif preset_mode == PRESET_EVAP_TEMP:
+        elif preset_mode == PRESET_COOL_TEMP:
             await self.controller.set_cooling_by_temperature(self.zone)
-        elif preset_mode == PRESET_EVAP_FAN_SPEED:
+        elif preset_mode == PRESET_COOL_FAN_SPEED:
             await self.controller.set_cooling_by_speed(self.zone)
         elif preset_mode == PRESET_HEAT_TEMP:
             await self.controller.set_heating_by_temperature(self.zone)
         elif preset_mode == PRESET_HEAT_FAN_SPEED:
             await self.controller.set_heating_by_speed(self.zone)
-        elif preset_mode == PRESET_COOL_TEMP:
-            await self.controller.set_aoc_by_temperature(self.zone)
-        elif preset_mode == PRESET_COOL_FAN_SPEED:
-            await self.controller.set_aoc_by_speed(self.zone)
+        # elif preset_mode == PRESET_COOL_TEMP:
+        #     await self.controller.set_aoc_by_temperature(self.zone)
+        # elif preset_mode == PRESET_COOL_FAN_SPEED:
+        #     await self.controller.set_aoc_by_speed(self.zone)
         elif preset_mode == PRESET_NONE:
             await self.async_set_hvac_mode(HVACMode.OFF)
         # self._thermostat.mode = HA_TO_EQ_PRESET[preset_mode]
