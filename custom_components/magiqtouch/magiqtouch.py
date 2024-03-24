@@ -109,10 +109,14 @@ class MagiQtouch_Driver:
             return self._httpsession
 
     async def startup(self, hass):
+        _LOGGER.warning("startup")
+
         await self.login(hass)
         await self.get_system_details()
         await self.ws_start()
+        _LOGGER.warning("initial refresh")
         await self.full_refresh(initial=True)
+        _LOGGER.warning("refresh received")
 
     async def login(self, hass=None):
         self.hass = hass
@@ -268,6 +272,15 @@ class MagiQtouch_Driver:
                             # cognito auth token lasts (default) 1 hour.
                             # re-start websocket before we get too close to this.
                             break
+
+            except asyncio.exceptions.CancelledError:
+                # Shutting Down
+                return
+            except RuntimeError as ex:
+                if "Session is closed" in str(ex):
+                    # Shutting Down
+                    return
+                _LOGGER.exception("websocket")
             except asyncio.TimeoutError:
                 _LOGGER.info(f"websocket timeout after {counter} messages.")
             except:
