@@ -2,7 +2,6 @@
 import sys
 import async_timeout
 from pathlib import Path
-from datetime import timedelta
 
 __vendor__ = str(Path(__file__).parent / "vendor")
 sys.path.append(__vendor__)
@@ -61,19 +60,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     # todo enable this again
     # driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
-    hass.async_create_task(wait_for_data_then_create_entities(hass, driver, entry))
-    entry.async_on_unload(entry.add_update_listener(options_update_listener))
-    return True
-
-
-async def wait_for_data_then_create_entities(hass, driver, entry):
     await driver.startup(hass)
     # await coordinator.async_config_entry_first_refresh()
     _LOGGER.warning("creating platforms now")
     for component in PLATFORMS:
-        await hass.config_entries.async_forward_entry_setup(entry, component)
+        hass.async_create_task(hass.config_entries.async_forward_entry_setup(entry, component))
     # listen for changes to the configuration options
-    _LOGGER.warning("finished startup")
+    _LOGGER.warning("finished configuring entities")
+
+    entry.async_on_unload(entry.add_update_listener(options_update_listener))
+    _LOGGER.warning("finished async_setup_entry")
+    return True
 
 
 async def options_update_listener(hass, config_entry):
@@ -92,9 +89,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
             ]
         )
     )
-    if unload_ok:
-        driver = hass.data[DOMAIN][entry.entry_id]["driver"]
-        await driver.logout()
+    driver = hass.data[DOMAIN][entry.entry_id]["driver"]
+    await driver.logout()
 
     return unload_ok
 
@@ -113,21 +109,10 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
             update_interval=SCAN_INTERVAL,
         )
         self.controller = controller
-        self.fast_update = 0
         self.controller.set_listener(self.data_updated)
 
     def data_updated(self):
         self.async_set_updated_data(None)
-
-    def start_fast_updates(self):
-        """fetch data at high polling rate for 8 second"""
-        _LOGGER.debug("start fast update")
-        self.fast_update = 16
-        self.update_interval = timedelta(milliseconds=500)
-
-    async def async_request_refresh(self):
-        self.start_fast_updates()
-        return await super().async_request_refresh()
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -135,12 +120,6 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
         Data should be pre-processed here if possible.
         For more info, see https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
         """
-        if self.fast_update:
-            _LOGGER.debug("fast refresh")
-            self.fast_update -= 1
-            if not self.fast_update:
-                self.update_interval = SCAN_INTERVAL
-
         try:
             async with async_timeout.timeout(10):
                 return await self.controller.refresh_state()

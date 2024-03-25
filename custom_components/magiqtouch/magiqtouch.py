@@ -75,10 +75,15 @@ class MagiQtouch_Driver:
 
         self.ws: aiohttp.ClientWebSocketResponse = None
         self.pending_setting: Optional[SettingJob] = None
+        self.ws_handler_task = None
 
         self.verbose = True
 
     async def shutdown(self):
+        _LOGGER.warning("shutdown")
+        if self.ws_handler_task:
+            self.ws_handler_task.cancel()
+
         if self.ws:
             _LOGGER.info("Closing Websocket")
             await self.ws.close()
@@ -163,10 +168,10 @@ class MagiQtouch_Driver:
         return True
 
     async def ws_start(self):
-        if self.hass:
-            self.hass.async_create_task(self.ws_handler())
-        else:
-            asyncio.create_task(self.ws_handler())
+        # if self.hass:
+        #    self.ws_handler_task = self.hass.async_create_task(self.ws_handler())
+        # else:
+        self.ws_handler_task = asyncio.create_task(self.ws_handler())
 
     async def ws_send(self, message, checker):
         if self.hass:
@@ -273,7 +278,7 @@ class MagiQtouch_Driver:
                             # re-start websocket before we get too close to this.
                             break
 
-            except asyncio.exceptions.CancelledError:
+            except asyncio.CancelledError:
                 # Shutting Down
                 return
             except RuntimeError as ex:
@@ -291,7 +296,6 @@ class MagiQtouch_Driver:
     async def logout(self):
         # TODO does an actually logout help?
         await self.shutdown()
-        # todo is this called by HA
 
     async def get_system_details(self):
         ## Get system data & MACADDRESS
