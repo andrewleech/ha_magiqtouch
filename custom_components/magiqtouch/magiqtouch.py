@@ -352,7 +352,8 @@ class MagiQtouch_Driver:
             raise
 
     async def _get_token(self):
-        await self._cognito.check_token(renew=True)
+        # Cognito isn't fully Async. Boto3 is eventually used and has blocking IO
+        await asyncio.to_thread(asyncio.run, self._cognito.check_token(renew=True))
         return self._cognito.id_token
 
     async def _get_auth(self, token=None):
