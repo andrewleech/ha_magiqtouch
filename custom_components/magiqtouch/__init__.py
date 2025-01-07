@@ -62,8 +62,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
     await driver.startup(hass)
     # await coordinator.async_config_entry_first_refresh()
-    for component in PLATFORMS:
-        hass.async_create_task(hass.config_entries.async_forward_entry_setup(entry, component))
+    # 2025.1 Depracates async_forward_entry_setup, replace with new method
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # listen for changes to the configuration options
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
     return True

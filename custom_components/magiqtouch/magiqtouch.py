@@ -156,7 +156,9 @@ class MagiQtouch_Driver:
                 secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
             )
 
-            await self._cognito.authenticate(self._password)
+            # Cognito.authenticate() isn't fully Async. Boto3 is eventually used and has blocking IO
+            await asyncio.to_thread(asyncio.run, self._cognito.authenticate(self._password))
+
         except Exception as ex:
             if "UserNotFoundException" in str(ex) or "NotAuthorizedException" in str(ex):
                 _LOGGER.exception("Error with login email/password", ex)
