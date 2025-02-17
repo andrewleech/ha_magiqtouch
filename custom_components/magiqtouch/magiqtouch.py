@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, List
 
 from .structures import RemoteStatus, SystemDetails
 from .const import (
@@ -77,20 +77,21 @@ class MagiQtouch_Driver:
 
         self.logged_in = False
 
-        self.ws: aiohttp.ClientWebSocketResponse = None
-        self.pending_setting: Optional[SettingJob] = None
-        self.ws_handler_task = None
+        self.ws: List[aiohttp.ClientWebSocketResponse] = []
+        # self.pending_setting: Optional[SettingJob] = None
+        # self.ws_handler_task = None
 
         self.verbose = True
 
     async def shutdown(self):
         _LOGGER.info("shutdown")
-        if self.ws_handler_task:
-            self.ws_handler_task.cancel()
+        # if self.ws_handler_task:
+        #    self.ws_handler_task.cancel()
 
         if self.ws:
-            _LOGGER.info("Closing Websocket")
-            await self.ws.close()
+            _LOGGER.info("Closing Websockets: self.ws")
+            for ws in self.ws:
+                await ws.close()
 
         if self._httpsession and self.httpsession_created:
             _LOGGER.info("Closing http session")
@@ -113,34 +114,25 @@ class MagiQtouch_Driver:
             return aiohttp_client.async_get_clientsession(self.hass)
         else:
             if not self._httpsession:
-                self._httpsession = aiohttp.ClientSession(trust_env=True)
+                self._httpsession = aiohttp.ClientSession(
+                    trust_env=True,
+                )
                 self.httpsession_created = True
             return self._httpsession
 
     async def startup(self, hass):
         await self.login(hass)
         await self.get_system_details()
-        await self.ws_start()
-        for _ in range(10):
-            if self.ws:
-                break
-            await asyncio.sleep(1)
+        self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
+        self._refresh_msg = json.dumps(
+            {"action": "status", "params": {"device": self._mac_address}}
+        )
+
         await self.full_refresh(initial=True)
 
     async def login(self, hass=None):
         self.hass = hass
-
         _LOGGER.info("Logging in...")
-
-        # if httpsession:
-        #   if self.httpsession is not httpsession and self.httpsession_created:
-        #       await self.httpsession.close()
-        #       self.httpsession = None
-        #       self.httpsession_created = False
-        #   self.httpsession = httpsession
-        # elif not self.httpsession:
-        #     self.httpsession = aiohttp.ClientSession(trust_env=True)
-        #     self.httpsession_created = True
         try:
             # can also try
             # https://stackoverflow.com/questions/70503800/how-can-i-test-aws-cognito-protected-apis-in-python
@@ -172,41 +164,18 @@ class MagiQtouch_Driver:
         self.logged_in = True
         return True
 
-    async def ws_start(self):
-        # if self.hass:
-        #    self.ws_handler_task = self.hass.async_create_task(self.ws_handler())
-        # else:
-        self.ws_handler_task = asyncio.create_task(self.ws_handler())
-
-    async def ws_send(self, message, checker):
-        if self.hass:
-            self.hass.async_create_task(self.ws_send_job(message, checker))
-        else:
-            asyncio.create_task(self.ws_send_job(message, checker))
-
-    async def ws_send_job(self, message, checker, timeout=8):
+    async def ws_send(self, message, checker, timeout=8):
         job = SettingJob(
             message=message,
             checker=checker,
             status=0,
-            event=asyncio.Event(),
             timeout=time.time() + timeout,
         )
-        if self.pending_setting:
-            self.pending_setting.status = "replaced"
-            self.pending_setting.event.set()
-            _LOGGER.info("previous job replaced")
-        self.pending_setting = job
 
-        if self.ws and not self.ws.closed:
-            await self.ws.send_str(message)
-        else:
-            _LOGGER.info("ws not open yet")
-        # if not open, the pending job will be
-        # sent when it does open
+        _LOGGER.info(f"ws send: {message}")
 
         try:
-            await asyncio.wait_for(job.event.wait(), timeout)
+            await asyncio.wait_for(self.ws_handler(job), timeout)
             if self.verbose:
                 _LOGGER.info("ws sent and received: %s\n%s" % (message, self.current_state))
             return True
@@ -219,106 +188,96 @@ class MagiQtouch_Driver:
             else:
                 msg = f"Unexpected state after {job.status} responses"
             _LOGGER.warning(f"set job timeout after {timeout}s: {msg}")
-        # if self.ws:
-        #    await self.ws.close()
         return False
 
-    async def send_pending(self):
-        if self.pending_setting:
-            _LOGGER.info("ws pending message send")
-            message = self.pending_setting.message
-            await self.ws.send_str(message)
+    async def ws_handler(self, job):
+        # while True:
+        token = await self._get_token()
+        headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
+        # async with aiohttp.ClientSession(trust_env=True) as session:
+        counter = 0
+        timeout = job.timeout or int(SCAN_INTERVAL.total_seconds() - 3)
 
-    async def ws_handler(self):
-        while True:
-            token = await self._get_token()
-            headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
-            # async with aiohttp.ClientSession(trust_env=True) as session:
-            counter = 0
-            timeout = int(SCAN_INTERVAL.total_seconds() * 1.25)
+        try:
+            async with self.httpsession.ws_connect(
+                WebsocketUrl + token,
+                headers=headers,
+                autoping=False,
+                autoclose=True,
+                timeout=timeout,
+            ) as ws:
+                self.ws.append(ws)
+                _LOGGER.info("websocket connected")
 
-            try:
-                async with self.httpsession.ws_connect(
-                    WebsocketUrl + token,
-                    headers=headers,
-                    autoping=False,
-                    autoclose=False,
-                    timeout=timeout,
-                    # ssl=False
-                ) as ws:
-                    self.ws = ws
-                    _LOGGER.info("websocket connected")
-                    if self.pending_setting:
-                        asyncio.create_task(self.send_pending())
-                    # json.dumps({"action": "status", "params": {"device": self._mac_address}})
-                    # )
+                # msg = json.dumps({"action": "status",
+                #    "params": {"device": self._mac_address}})
+                # await ws.send_str(msg)
 
-                    connected_time = time.time()
-                    while msg := await asyncio.wait_for(ws.receive(), timeout):
-                        counter += 1
-                        if msg.type in (
-                            aiohttp.WSMsgType.CLOSE,
-                            aiohttp.WSMsgType.CLOSING,
-                            aiohttp.WSMsgType.CLOSED,
-                        ):
-                            _LOGGER.info(
-                                f"ws: received close request after "
-                                f"{counter} {msg} {msg.type} {msg.data}"
-                                f"{counter} {msg} {msg.type} {msg.data}"
-                            )
-                            break
-                        elif msg.type == aiohttp.WSMsgType.TEXT:
-                            data = json.loads(msg.data)
-                            # _LOGGER.info(f"ws: {msg.data}")
-                            status = RemoteStatus.from_dict(data)
-                            # _LOGGER.info(f"ws: {str(status)}")
-                            if self.pending_setting:
-                                if self.pending_setting.checker(status):
-                                    self.pending_setting.status = "confirmed"
-                                    self.pending_setting.event.set()
-                                    self.pending_setting = None
-                                else:
-                                    _LOGGER.info(f"received but no match: {status}")
-                                    if isinstance(self.pending_setting.status, int):
-                                        self.pending_setting.status += 1
-                                    if time.time() > self.pending_setting.timeout:
-                                        # timeout
-                                        self.pending_setting = None
+                message = job.message
+                await ws.send_str(message)
 
-                            if not self.pending_setting:
-                                try:
-                                    self.process_new_state(status)
-                                except:
-                                    _LOGGER.exception("process_new_state failed")
-                                else:
-                                    _LOGGER.info("state processed")
-
-                        elif msg.type == aiohttp.WSMsgType.ERROR:
-                            _LOGGER.warning(msg)
-                            break
+                connected_time = time.time()
+                while msg := await ws.receive():
+                    counter += 1
+                    if msg.type in (
+                        aiohttp.WSMsgType.CLOSE,
+                        aiohttp.WSMsgType.CLOSING,
+                        aiohttp.WSMsgType.CLOSED,
+                    ):
+                        _LOGGER.info(
+                            f"ws: received close request after "
+                            f"{counter} {msg} {msg.type} {msg.data}"
+                        )
+                        break
+                    elif msg.type == aiohttp.WSMsgType.TEXT:
+                        data = json.loads(msg.data)
+                        # _LOGGER.info(f"ws: {msg.data}")
+                        status = RemoteStatus.from_dict(data)
+                        _LOGGER.info(f"ws recv: {str(status)}")
+                        if job and job.checker:
+                            if job.checker(status):
+                                job.status = "confirmed"
+                                # job.event.set()
+                                self.process_new_state(status)
+                                job = None
+                            else:
+                                _LOGGER.info(f"received but no match: {status}")
+                                if isinstance(job.status, int):
+                                    job.status += 1
                         else:
-                            _LOGGER.warning(f"ws unexpected: {msg}")
+                            try:
+                                self.process_new_state(status)
+                            except:
+                                _LOGGER.exception("process_new_state failed")
+                            else:
+                                _LOGGER.info("state processed")
 
-                        if (time.time() - connected_time) > (45 * 60):
-                            # cognito auth token lasts (default) 1 hour.
-                            # re-start websocket before we get too close to this.
-                            _LOGGER.info("cognito refresh")
-                            break
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        _LOGGER.warning(msg)
+                        break
+                    else:
+                        _LOGGER.warning(f"ws unexpected: {msg}")
 
-            except asyncio.CancelledError:
+                    if (time.time() - connected_time) > (45 * 60):
+                        # cognito auth token lasts (default) 1 hour.
+                        # re-start websocket before we get too close to this.
+                        _LOGGER.info("cognito refresh")
+                        break
+
+        except asyncio.CancelledError:
+            # Shutting Down
+            return
+        except RuntimeError as ex:
+            if "Session is closed" in str(ex):
                 # Shutting Down
                 return
-            except RuntimeError as ex:
-                if "Session is closed" in str(ex):
-                    # Shutting Down
-                    return
-                _LOGGER.exception("websocket")
-            except asyncio.TimeoutError:
-                _LOGGER.warning(f"websocket timeout after {counter} messages.")
-            except:
-                _LOGGER.exception("websocket")
-            self.ws = None
-            _LOGGER.info("websocket has closed")
+            _LOGGER.exception("websocket")
+        except asyncio.TimeoutError:
+            _LOGGER.exception(f"websocket timeout {timeout} after {counter} messages.")
+        except:
+            _LOGGER.exception("websocket")
+        self.ws.remove(ws)
+        _LOGGER.info("websocket has closed")
 
     async def logout(self):
         # TODO does an actually logout help?
@@ -344,7 +303,6 @@ class MagiQtouch_Driver:
                     _LOGGER.warning(f"Current System State: {json.dumps(redacted)}")
                 # parse the json into dataclass after its logged in case of errors
                 self.current_system_state = SystemDetails.from_dict(system_data)
-                self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
         except Exception:
             _LOGGER.exception("failed to query devices/system")
             if redacted:
@@ -363,19 +321,19 @@ class MagiQtouch_Driver:
     def set_listener(self, listener):
         self._update_listener = listener
 
-    async def refresh_state(self, force=False):
-        if force or not self.ws or self.ws.closed:
-            await self.full_refresh()
+    async def refresh_state(self):
+        await self.full_refresh()
 
     async def full_refresh(self, initial=False):
+        _LOGGER.info("refresh")
         if not self.logged_in:
             raise ValueError("Not logged in")
 
         ts = 0 if initial else self.current_state.timestamp
         msg = json.dumps({"action": "status", "params": {"device": self._mac_address}})
         for _retry in range(3):
-            checker = lambda state: (bool(state.runningMode) and state.timestamp != ts)
-            if await self.ws_send_job(msg, checker, timeout=20 if initial else 8):
+            checker = lambda state: (state.runningMode and (state.timestamp != ts))
+            if await self.ws_send(msg, checker, timeout=12 if initial else 8):
                 # if await self.wait_for_new_state(checker, timeout=8):
                 break
 
@@ -697,7 +655,7 @@ class SettingJob:
     message: str
     checker: Callable
     status: int | str
-    event: asyncio.Event
+    # event: asyncio.Event
     timeout: float
 
 
@@ -733,6 +691,7 @@ def main():
     async def atest():
         try:
             await m.login()
+            await m.get_system_details()
             await m.refresh_state()
             while not m.current_state.timestamp:
                 await asyncio.sleep(1)

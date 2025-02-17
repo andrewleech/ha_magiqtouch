@@ -1,6 +1,5 @@
 """The Seeley MagiQtouch integration."""
 import sys
-import async_timeout
 from pathlib import Path
 
 __vendor__ = str(Path(__file__).parent / "vendor")
@@ -58,11 +57,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         driver=driver,
         coordinator=coordinator,
     )
-    # todo enable this again
-    # driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
+    driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
     await driver.startup(hass)
-    # await coordinator.async_config_entry_first_refresh()
-    # 2025.1 Depracates async_forward_entry_setup, replace with new method
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # listen for changes to the configuration options
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
@@ -117,8 +113,7 @@ class MagiQtouchCoordinator(DataUpdateCoordinator):
         For more info, see https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
         """
         try:
-            async with async_timeout.timeout(10):
-                return await self.controller.refresh_state()
+            return await self.controller.refresh_state()
         except Exception as ex:
             _LOGGER.warning(
                 "Updating the state failed, will retry with login: %s(%s)" % (type(ex), ex)

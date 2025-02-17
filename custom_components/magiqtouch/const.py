@@ -4,7 +4,7 @@ from datetime import timedelta
 DOMAIN = "magiqtouch"
 
 # DataUpdateCoordinator polling rate
-SCAN_INTERVAL = timedelta(seconds=30)
+SCAN_INTERVAL = timedelta(seconds=60)
 
 FAN_MIN = "min"
 FAN_MAX = "max"

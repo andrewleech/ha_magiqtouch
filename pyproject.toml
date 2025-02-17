@@ -7,8 +7,9 @@ authors = [
 ]
 dependencies = [
 "mandate==2.0.1",
-#"aiohttp==3.7.2",
-#"requests==2.28.1",
+"aiohttp==3.9.3",
+"requests==2.31.0",
+"async-timeout",
 "homeassistant==2024.2.5",
 ]
 #[project.dev-dependencies]

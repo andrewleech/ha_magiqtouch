@@ -13,8 +13,8 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.core import callback
+
+from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
