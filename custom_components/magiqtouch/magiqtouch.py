@@ -148,7 +148,7 @@ class MagiQtouch_Driver:
                 secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
             )
 
-            # Cognito.authenticate() isn't fully Async. Boto3 is eventually used and has blocking IO
+            # Cognito.authenticate() isn't fully async, Boto3 (used internally) has blocking IO
             await asyncio.to_thread(asyncio.run, self._cognito.authenticate(self._password))
 
         except Exception as ex:
@@ -175,7 +175,7 @@ class MagiQtouch_Driver:
         _LOGGER.info(f"ws send: {message}")
 
         try:
-            await asyncio.wait_for(self.ws_handler(job), timeout)
+            await self.ws_handler(job)
             if self.verbose:
                 _LOGGER.info("ws sent and received: %s\n%s" % (message, self.current_state))
             return True
@@ -196,8 +196,10 @@ class MagiQtouch_Driver:
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
         # async with aiohttp.ClientSession(trust_env=True) as session:
         counter = 0
-        timeout = job.timeout or int(SCAN_INTERVAL.total_seconds() - 3)
-
+        timeout = aiohttp.ClientWSTimeout(
+            ws_receive=job.timeout or int(SCAN_INTERVAL.total_seconds() - 3),
+            ws_close=None,
+        )
         try:
             async with self.httpsession.ws_connect(
                 WebsocketUrl + token,
