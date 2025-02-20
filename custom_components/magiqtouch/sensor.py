@@ -2,7 +2,6 @@ import logging
 
 from . import MagiQtouchCoordinator
 from .magiqtouch import MagiQtouch_Driver
-from typing import Callable, List
 
 
 # Import the device class from the component that you want to support
@@ -11,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 
 from homeassistant.core import callback, HomeAssistant
@@ -38,7 +37,7 @@ _LOGGER = logging.getLogger("magiqtouch")
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: Callable[[List[Entity], bool], None],
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up device based on a config entry."""
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
@@ -48,7 +47,7 @@ async def async_setup_entry(
 
     sensors = [
         TemperatureSensor(
-            "Internal Temperature",
+            "Temperature",
             driver,
             coordinator,
             zone=zone,
@@ -85,6 +84,12 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_device_info = {
+            "identifiers": {("magiqtouch", self.controller.device_id)},
+            "name": self.controller.device_name,
+            "manufacturer": "Seeley",
+            # "model": "<installed model>",
+        }
         self.data_callback = data_callback
         self.zone = zone
         self.master_zone = (not self.zone) or self.zone in (ZONE_TYPE_NONE, ZONE_TYPE_COMMON)
@@ -97,8 +102,8 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Return the name of the device."""
         if not self.master_zone:
             zone_name = self.controller.get_zone_name(self.zone)
-            return f"MagiQtouch - {zone_name} - {self.label}"
-        return f"MagiQtouch - {self.label}"
+            return f"{zone_name} - {self.label}"
+        return f"{self.label}"
 
     @callback
     def _handle_coordinator_update(self) -> None:

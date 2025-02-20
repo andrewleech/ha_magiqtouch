@@ -6,9 +6,8 @@ from .magiqtouch import MagiQtouch_Driver
 from .structures import UnitDetails
 
 import voluptuous as vol
-from typing import Callable, List
 import homeassistant.helpers.config_validation as cv
-
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 # Import the device class from the component that you want to support
 from homeassistant.components.climate import (
@@ -19,7 +18,6 @@ from homeassistant.components.climate import (
     HVACMode,
     UnitOfTemperature,
 )
-from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
@@ -80,14 +78,15 @@ PRESET_COOL_FAN_SPEED = "Cooling: set fan speed"
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: Callable[[List[Entity], bool], None],
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up device based on a config entry."""
     driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
     coordinator: MagiQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     async_add_entities(
-        [MagiQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list], False
+        [MagiQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list],
+        update_before_add=True,
     )
 
 
@@ -105,6 +104,12 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         super().__init__(coordinator)
         self.controller = controller
         self.coordinator = coordinator
+        self._attr_device_info = {
+            "identifiers": {("magiqtouch", self.controller.device_id)},
+            "name": self.controller.device_name,
+            "manufacturer": "Seeley",
+            # "model": "<installed model>",
+        }
 
         self.zone = zone
         self.master_zone = (not self.zone) or self.zone in (ZONE_TYPE_NONE, ZONE_TYPE_COMMON)

@@ -128,6 +128,8 @@ class MagiQtouch_Driver:
         self._refresh_msg = json.dumps(
             {"action": "status", "params": {"device": self._mac_address}}
         )
+        self.device_id = f"magiqtouch_{self._mac_address}"
+        self.device_name = "MagIQtouch"
 
         await self.full_refresh(initial=True)
 
