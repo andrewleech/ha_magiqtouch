@@ -169,7 +169,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         """Return if thermostat is available."""
         return (
             self.controller.logged_in
-            and self.controller.ws is not None
+            and self.controller.jobs is not None
             and self.controller.current_state.runningMode != ""
         )
 

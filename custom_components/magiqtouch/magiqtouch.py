@@ -77,7 +77,7 @@ class MagiQtouch_Driver:
 
         self.logged_in = False
 
-        self.ws: List[aiohttp.ClientWebSocketResponse] = []
+        self.jobs: List[WebsocketJob] = []
         # self.pending_setting: Optional[SettingJob] = None
         # self.ws_handler_task = None
 
@@ -88,10 +88,11 @@ class MagiQtouch_Driver:
         # if self.ws_handler_task:
         #    self.ws_handler_task.cancel()
 
-        if self.ws:
+        if self.jobs:
             _LOGGER.info("Closing Websockets: self.ws")
-            for ws in self.ws:
-                await ws.close()
+            for job in self.jobs:
+                if job.ws:
+                    await job.ws.close()
 
         if self._httpsession and self.httpsession_created:
             _LOGGER.info("Closing http session")
@@ -165,7 +166,7 @@ class MagiQtouch_Driver:
         return True
 
     async def ws_send(self, message, checker, timeout=8):
-        job = SettingJob(
+        job = WebsocketJob(
             message=message,
             checker=checker,
             status=0,
@@ -208,15 +209,20 @@ class MagiQtouch_Driver:
                 autoclose=True,
                 timeout=timeout,
             ) as ws:
-                self.ws.append(ws)
-                _LOGGER.info("websocket connected")
+                _LOGGER.info(f"websocket connected: {self.jobs}")
 
-                # msg = json.dumps({"action": "status",
-                #    "params": {"device": self._mac_address}})
-                # await ws.send_str(msg)
+                job.ws = ws
 
-                message = job.message
-                await ws.send_str(message)
+                # Signal existing background websockets to close
+                # This prevents a background refresh jobs from overriding new settings
+                for _job in list(self.jobs):
+                    if _job.ws and not _job.checker:
+                        await _job.ws.close()
+                        self.jobs.remove(_job)
+
+                self.jobs.append(job)
+
+                await ws.send_str(job.message)
 
                 connected_time = time.time()
                 while msg := await ws.receive():
@@ -235,13 +241,19 @@ class MagiQtouch_Driver:
                         data = json.loads(msg.data)
                         # _LOGGER.info(f"ws: {msg.data}")
                         status = RemoteStatus.from_dict(data)
-                        _LOGGER.info(f"ws recv: {str(status)}")
+                        _LOGGER.info(f"{ws} recv: {str(status)}")
                         if job and job.checker:
                             if job.checker(status):
+                                _LOGGER.info("received expected resp")
                                 job.status = "confirmed"
-                                # job.event.set()
+                                job.checker = None
                                 self.process_new_state(status)
-                                job = None
+
+                                # This was a set / control message, restart refresh websocket
+                                if job.message != self._refresh_msg:
+                                    await self.background_refresh()
+                                await ws.close()
+                                break
                             else:
                                 _LOGGER.info(f"received but no match: {status}")
                                 if isinstance(job.status, int):
@@ -266,6 +278,9 @@ class MagiQtouch_Driver:
                         _LOGGER.info("cognito refresh")
                         break
 
+        except aiohttp.client_exceptions.ClientConnectionResetError:
+            if ws and not ws.closed:
+                raise
         except asyncio.CancelledError:
             # Shutting Down
             return
@@ -278,7 +293,8 @@ class MagiQtouch_Driver:
             _LOGGER.exception(f"websocket timeout {timeout} after {counter} messages.")
         except:
             _LOGGER.exception("websocket")
-        self.ws.remove(ws)
+        if job in self.jobs:
+            self.jobs.remove(job)
         _LOGGER.info("websocket has closed")
 
     async def logout(self):
@@ -323,8 +339,17 @@ class MagiQtouch_Driver:
     def set_listener(self, listener):
         self._update_listener = listener
 
+    def create_task(self, co):
+        if self.hass:
+            return self.hass.async_create_task(co)
+        else:
+            return asyncio.create_task(co)
+
     async def refresh_state(self):
-        await self.full_refresh()
+        await self.background_refresh()
+
+    async def background_refresh(self):
+        self.create_task(self.full_refresh())
 
     async def full_refresh(self, initial=False):
         _LOGGER.info("refresh")
@@ -332,12 +357,13 @@ class MagiQtouch_Driver:
             raise ValueError("Not logged in")
 
         ts = 0 if initial else self.current_state.timestamp
-        msg = json.dumps({"action": "status", "params": {"device": self._mac_address}})
-        for _retry in range(3):
+        if initial:
             checker = lambda state: (state.runningMode and (state.timestamp != ts))
-            if await self.ws_send(msg, checker, timeout=12 if initial else 8):
-                # if await self.wait_for_new_state(checker, timeout=8):
-                break
+            timeout = 12
+        else:
+            checker = None
+            timeout = 8
+        await self.ws_send(self._refresh_msg, checker, timeout)
 
     def process_new_state(self, new_state):
         if self._update_listener_override:
@@ -653,12 +679,12 @@ class MagiQtouch_Driver:
 
 
 @dataclass
-class SettingJob:
+class WebsocketJob:
     message: str
-    checker: Callable
+    checker: Callable | None
     status: int | str
-    # event: asyncio.Event
     timeout: float
+    ws: aiohttp.ClientWebSocketResponse | None = None
 
 
 def main():
