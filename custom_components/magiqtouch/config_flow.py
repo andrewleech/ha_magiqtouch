@@ -6,18 +6,17 @@ import voluptuous as vol
 
 from homeassistant import config_entries, core, exceptions
 from homeassistant.core import callback
+
 from .magiqtouch import MagiQtouch_Driver
-from .const import DOMAIN, CONF_VERBOSE  # pylint:disable=unused-import
+from .const import DOMAIN, CONF  # pylint:disable=unused-import
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF.USERNAME): str,
+        vol.Required(CONF.PASSWORD): str,
     }
 )
 
@@ -30,13 +29,13 @@ async def validate_input(hass: core.HomeAssistant, data):
     # If your PyPI package is not built with async, pass your methods
     # to the executor:
     # await hass.async_add_executor_job(
-    #     your_validate_func, data[CONF_USERNAME], data[CONF_PASSWORD]
+    #     your_validate_func, data[CONF.USERNAME], data[CONF.PASSWORD]
     # )
 
-    hub = MagiQtouch_Driver(user=data[CONF_USERNAME], password=data[CONF_PASSWORD])
+    driver = MagiQtouch_Driver(user=data[CONF.USERNAME], password=data[CONF.PASSWORD])
 
     try:
-        if not await hub.login():
+        if not await driver.login():
             raise InvalidAuth
     except Exception as e:
         import traceback
@@ -48,7 +47,12 @@ async def validate_input(hass: core.HomeAssistant, data):
         raise CannotConnect
 
     # Return info that you want to store in the config entry.
-    return {"title": "MagiQtouch"}
+    await driver.startup(hass)
+
+    data[CONF.TITLE] = "MagiQtouch"
+    data[CONF.SYS_STATE] = driver.current_system_state
+    data[CONF.ZONES] = driver.zone_list
+    return data
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
@@ -77,7 +81,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
         else:
-            return self.async_create_entry(title=info["title"], data=user_input)
+            return self.async_create_entry(title=info["title"], data=info)
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
@@ -107,8 +111,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_VERBOSE,
-                        default=self.config_entry.options.get(CONF_VERBOSE),
+                        CONF.VERBOSE,
+                        default=self.config_entry.options.get(CONF.VERBOSE),
                     ): bool
                 }
             ),

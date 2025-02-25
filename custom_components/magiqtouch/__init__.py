@@ -20,13 +20,9 @@ from .magiqtouch import MagiQtouch_Driver
 from .const import (
     SCAN_INTERVAL,
     DOMAIN,
-    CONF_VERBOSE,
+    CONF,
 )
-from homeassistant.const import (
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    Platform,
-)
+from homeassistant.const import Platform
 
 CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 
@@ -46,8 +42,8 @@ async def async_setup(hass: HomeAssistant, config: dict):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up Seeley MagiQtouch from a config entry."""
-    username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
+    username = entry.data[CONF.USERNAME]
+    password = entry.data[CONF.PASSWORD]
 
     driver = MagiQtouch_Driver(user=username, password=password)
     coordinator = MagiQtouchCoordinator(hass, driver)
@@ -57,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         driver=driver,
         coordinator=coordinator,
     )
-    driver.set_verbose(entry.options.get(CONF_VERBOSE, False), initial=True)
+    driver.set_verbose(entry.options.get(CONF.VERBOSE, False), initial=True)
     await driver.startup(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # listen for changes to the configuration options
@@ -68,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 async def options_update_listener(hass, config_entry):
     """Handle options update."""
     driver = hass.data[DOMAIN][config_entry.entry_id]["driver"]
-    driver.set_verbose(config_entry.options[CONF_VERBOSE])
+    driver.set_verbose(config_entry.options[CONF.VERBOSE])
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
