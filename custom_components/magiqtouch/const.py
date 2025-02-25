@@ -1,5 +1,6 @@
 """Constants for the Seeley MagiQtouch integration."""
 from datetime import timedelta
+from collections import namedtuple
 
 DOMAIN = "magiqtouch"
 
@@ -20,22 +21,10 @@ MODE_HEATER_FAN = "HEATER_FAN"
 CONTROL_MODE_FAN = "FAN"
 CONTROL_MODE_TEMP = "TEMP"  # todo check
 
+ZoneType = namedtuple("ZoneType", ("type", "name"))
 
-class ZoneType:
-    def __init__(self, label):
-        self.label = label
-        self._hash = hash("zt" + self.label)
+ZONE_TYPE_NONE = "NONE"
+ZONE_TYPE_COMMON = "COMMON"
 
-    def __eq__(self, other):
-        if isinstance(other, ZoneType):
-            return other is self
-        return other == self.label
-
-    def __hash__(self):
-        return self._hash
-
-
-ZONE_TYPE_NONE = ZoneType("NONE")
-ZONE_TYPE_COMMON = ZoneType("COMMON")
-ZONE_TYPE_INDIVIDUAL = ZoneType("INDIVIDUAL")
-ZONE_TYPE_SLAVE = ZoneType("SLAVE")
+ZONE_NONE = ZoneType(ZONE_TYPE_NONE, None)
+ZONE_COMMON = ZoneType(ZONE_TYPE_COMMON, None)

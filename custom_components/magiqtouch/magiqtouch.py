@@ -20,7 +20,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable, List
 
-from .structures import RemoteStatus, SystemDetails
+from .structures import RemoteStatus, SystemDetails, Zone
 from .const import (
     SCAN_INTERVAL,
     MODE_COOLER,
@@ -29,9 +29,10 @@ from .const import (
     MODE_HEATER_FAN,
     CONTROL_MODE_FAN,
     CONTROL_MODE_TEMP,
-    ZoneType,
-    ZONE_TYPE_NONE,
     ZONE_TYPE_COMMON,
+    ZONE_NONE,
+    ZONE_COMMON,
+    ZoneType,
 )
 
 AWS_REGION = "ap-southeast-2"
@@ -68,7 +69,7 @@ class MagiQtouch_Driver:
 
         self.current_state: RemoteStatus = RemoteStatus()
         self.current_system_state: SystemDetails = SystemDetails()
-        self._zone_list = []
+        self._zone_list: List[ZoneType] = []
         self._zone_coolers = dict()
         self._zone_heaters = dict()
 
@@ -423,31 +424,30 @@ class MagiQtouch_Driver:
         if not zone:
             return ""
         if isinstance(zone, ZoneType):
-            return zone.label
+            return zone.name or zone.type
+        if isinstance(zone, Zone):
+            return zone.Name
+        raise ValueError()
         return zone
 
     @property
-    def zone_list(self):
+    def zone_list(self) -> List[ZoneType]:
         if not self._zone_list:
             if self.current_system_state.NoOfZoneControls == 0:
-                return [ZONE_TYPE_NONE]
+                return [ZONE_NONE]
             self._zone_list = []
-            # Always createa common / master entity
-            zones: set[str | ZoneType] = {ZONE_TYPE_COMMON}  # Use set to provide de-duplication
+            # Always create a common / master entity
+            zones: set[ZoneType] = {ZONE_COMMON}  # Use set to provide de-duplication
             for d in self.current_state.cooler + self.current_state.heater:
-                if d.zoneType != ZONE_TYPE_COMMON.label:
-                    zones.add(d.name)
+                if d.zoneType != ZONE_TYPE_COMMON:
+                    zones.add(ZoneType(d.zoneType, d.name))
             self._zone_list.extend(list(zones))
         return self._zone_list
 
     @staticmethod
     def zone_match(dev, zone):
-        return (
-            zone.label == dev.zoneType
-            if isinstance(zone, ZoneType)
-            else zone == dev.name
-            if isinstance(zone, str)
-            else True
+        return (zone in (ZONE_NONE, ZONE_COMMON) and dev.zoneType == zone.type) or (
+            ZoneType(dev.zoneType, dev.name) == zone
         )
 
     def available_coolers(self, zone):
@@ -468,7 +468,7 @@ class MagiQtouch_Driver:
 
         return self._zone_heaters[zone]
 
-    def active_device(self, zone=ZONE_TYPE_NONE, state=None):
+    def active_device(self, zone=ZONE_NONE, state=None):
         # if a zone has both heater and cooler, return the one
         # that matches system state.
         # Otherwise just return the device that's in zone.
@@ -516,7 +516,7 @@ class MagiQtouch_Driver:
 
     async def set_zone_onoff(self, zone, is_on):
         """Turns a specific zone on and off."""
-        if zone and zone in (ZONE_TYPE_COMMON, ZONE_TYPE_NONE):
+        if zone and zone in (ZONE_COMMON, ZONE_NONE):
             on_state = None
             return
         on_state = bool(is_on)
@@ -538,7 +538,7 @@ class MagiQtouch_Driver:
         _LOGGER.info(f"set_zone_onoff {zone}={is_on} = {self.current_state}")
         await self.send_current_state(checker)
 
-    async def set_fan_only(self, zone=ZONE_TYPE_NONE):
+    async def set_fan_only(self, zone=ZONE_NONE):
         runningMode = self.current_state.runningMode
         if runningMode in (MODE_COOLER, MODE_COOLER_FAN):
             await self.set_fan_only_evap(zone)
@@ -552,7 +552,7 @@ class MagiQtouch_Driver:
             device.runningState = "NOT_REQUIRED"
             device.zoneRunningState = "NOT_REQUIRED"
 
-    async def set_fan_only_evap(self, zone=ZONE_TYPE_NONE):
+    async def set_fan_only_evap(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_COOLER_FAN
         self._reset_device_state(zone)
@@ -561,7 +561,7 @@ class MagiQtouch_Driver:
         )
         await self.send_current_state(checker)
 
-    async def set_fan_only_heater(self, zone=ZONE_TYPE_NONE):
+    async def set_fan_only_heater(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_HEATER_FAN
         self._reset_device_state(zone)
@@ -570,17 +570,17 @@ class MagiQtouch_Driver:
         )
         await self.send_current_state(checker)
 
-    async def set_heating_by_temperature(self, zone=ZONE_TYPE_NONE):
+    async def set_heating_by_temperature(self, zone=ZONE_NONE):
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_TEMP
         await self.set_heating()
 
-    async def set_heating_by_speed(self, zone=ZONE_TYPE_NONE):
+    async def set_heating_by_speed(self, zone=ZONE_NONE):
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_FAN
         await self.set_heating()
 
-    async def set_heating(self, zone=ZONE_TYPE_NONE):
+    async def set_heating(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_HEATER
         self._reset_device_state(zone)
@@ -593,17 +593,17 @@ class MagiQtouch_Driver:
 
         await self.send_current_state(checker)
 
-    async def set_cooling_by_temperature(self, zone=ZONE_TYPE_NONE):
+    async def set_cooling_by_temperature(self, zone=ZONE_NONE):
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_TEMP
         await self.set_cooling()
 
-    async def set_cooling_by_speed(self, zone=ZONE_TYPE_NONE):
+    async def set_cooling_by_speed(self, zone=ZONE_NONE):
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_FAN
         await self.set_cooling()
 
-    async def set_cooling(self, zone=ZONE_TYPE_NONE):
+    async def set_cooling(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_COOLER
         self._reset_device_state(zone)
@@ -616,12 +616,12 @@ class MagiQtouch_Driver:
 
         await self.send_current_state(checker)
 
-    # async def set_aoc_by_temperature(self, zone=ZONE_TYPE_NONE):
+    # async def set_aoc_by_temperature(self, zone=ZONE_NONE):
     #     for cooler in self.available_coolers(zone):
     #         cooler.control_mode = CONTROL_MODE_TEMP
     #     await self.set_add_on_cooler()
 
-    # async def set_aoc_by_speed(self, zone=ZONE_TYPE_NONE):
+    # async def set_aoc_by_speed(self, zone=ZONE_NONE):
     #     for cooler in self.available_coolers(zone):
     #         cooler.control_mode = CONTROL_MODE_FAN
     #     await self.set_add_on_cooler()
@@ -642,7 +642,7 @@ class MagiQtouch_Driver:
 
     #     await self.send_current_state(checker)
 
-    async def set_current_speed(self, speed, zone=ZONE_TYPE_NONE):
+    async def set_current_speed(self, speed, zone=ZONE_NONE):
         speed = int(speed)
         for unit in chain(self.current_state.cooler, self.current_state.heater):
             unit.fan_speed = speed
@@ -652,7 +652,7 @@ class MagiQtouch_Driver:
         )
         await self.send_current_state(checker)
 
-    async def set_temperature(self, new_temp, zone=ZONE_TYPE_NONE):
+    async def set_temperature(self, new_temp, zone=ZONE_NONE):
         new_temp = int(new_temp)
         if device := self.active_device(zone):
             device.set_temp = new_temp

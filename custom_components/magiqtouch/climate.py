@@ -34,18 +34,14 @@ from homeassistant.const import (
     PRECISION_WHOLE,
 )
 from .const import (
-    # ATTR_IDENTIFIERS,
-    # ATTR_MANUFACTURER,
-    # ATTR_MODEL,
-    # ATTR_TARGET_TEMPERATURE,
     DOMAIN,
     MODE_COOLER,
     MODE_COOLER_FAN,
     MODE_HEATER,
     MODE_HEATER_FAN,
     CONTROL_MODE_TEMP,
-    ZONE_TYPE_COMMON,
-    ZONE_TYPE_NONE,
+    ZONE_COMMON,
+    ZONE_NONE,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -112,7 +108,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         }
 
         self.zone = zone
-        self.master_zone = (not self.zone) or self.zone in (ZONE_TYPE_NONE, ZONE_TYPE_COMMON)
+        self.master_zone = (not self.zone) or self.zone in (ZONE_NONE, ZONE_COMMON)
 
         self.master_mode_only_controller = False
         self._cooler: list[UnitDetails] = []
@@ -224,7 +220,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             # No sensor
             try:
                 # report common zone if it exists
-                current = self.controller.active_device(ZONE_TYPE_COMMON).internal_temp
+                current = self.controller.active_device(ZONE_COMMON).internal_temp
             except:
                 current = self.target_temperature
         return current
@@ -288,7 +284,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             return HVACAction.OFF
 
         # Show as off if individual zone is off
-        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_TYPE_NONE:
+        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_NONE:
             zone_on = self.controller.get_zone_onoff(self.zone)
             if not zone_on:
                 _LOGGER.debug(HVACAction.OFF + " (zone)")
@@ -321,7 +317,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.debug(f"hvac_mode: {HVACMode.OFF}")
             return HVACMode.OFF
 
-        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_TYPE_NONE:
+        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_NONE:
             zone_on = self.controller.get_zone_onoff(self.zone)
             if not zone_on:
                 _LOGGER.debug(HVACAction.OFF + " (zone)")

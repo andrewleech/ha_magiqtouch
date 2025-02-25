@@ -22,13 +22,9 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from .const import (
-    # ATTR_IDENTIFIERS,
-    # ATTR_MANUFACTURER,
-    # ATTR_MODEL,
-    # ATTR_TARGET_TEMPERATURE,
     DOMAIN,
-    ZONE_TYPE_COMMON,
-    ZONE_TYPE_NONE,
+    ZONE_COMMON,
+    ZONE_NONE,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -92,7 +88,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         }
         self.data_callback = data_callback
         self.zone = zone
-        self.master_zone = (not self.zone) or self.zone in (ZONE_TYPE_NONE, ZONE_TYPE_COMMON)
+        self.master_zone = (not self.zone) or self.zone in (ZONE_NONE, ZONE_COMMON)
 
         self._attr_native_value = 0
         self._attr_available = False
@@ -119,7 +115,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Return the unique ID for this sensor."""
         mac = self.controller.current_state.device
         zone_label = ""
-        if self.zone and self.zone != ZONE_TYPE_NONE:
+        if self.zone and self.zone != ZONE_NONE:
             zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
             zone_label = f"-zone-{zone_name}"
         uid = f"{mac}{zone_label}-sensor-{self.label}"
