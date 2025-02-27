@@ -20,6 +20,7 @@ class CONF:
     PASSWORD = CONF_PASSWORD
     VERBOSE = "log_json"
     TITLE = "title"
+    STATE = "state"
     SYS_STATE = "system_state"
     ZONES = "zone_list"
 

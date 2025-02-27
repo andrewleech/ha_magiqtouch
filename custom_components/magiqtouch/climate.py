@@ -82,7 +82,7 @@ async def async_setup_entry(
 
     async_add_entities(
         [MagiQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list],
-        update_before_add=True,
+        update_before_add=False,
     )
 
 
@@ -134,8 +134,6 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
         return uid
 
     def _init_units(self):
-        if not self.available:
-            raise ValueError("Not available yet")
         self._cooler = self.controller.available_coolers(self.zone)
         self._heater = self.controller.available_heaters(self.zone)
         self.master_mode_only_controller = not (self._cooler or self._heater)
@@ -168,11 +166,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def available(self) -> bool:
         """Return if thermostat is available."""
-        return (
-            self.controller.logged_in
-            and self.controller.jobs is not None
-            and self.controller.current_state.runningMode != ""
-        )
+        return self.controller.logged_in and self.controller.current_state.runningMode != ""
 
     @property
     def active_units(self):
@@ -234,8 +228,6 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def max_temp(self):
-        if not self.available:
-            return 35
         units = self.active_units or self.inactive_units
         return units[0].max_temp
         # try:
@@ -245,8 +237,6 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def min_temp(self):
-        if not self.available:
-            return 7
         units = self.active_units or self.inactive_units
         return units[0].min_temp
         # try:

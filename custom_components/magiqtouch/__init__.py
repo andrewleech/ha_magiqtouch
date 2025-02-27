@@ -21,7 +21,9 @@ from .const import (
     SCAN_INTERVAL,
     DOMAIN,
     CONF,
+    ZoneType,
 )
+from .structures import SystemDetails, RemoteStatus
 from homeassistant.const import Platform
 
 CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
@@ -45,7 +47,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     username = entry.data[CONF.USERNAME]
     password = entry.data[CONF.PASSWORD]
 
-    driver = MagiQtouch_Driver(user=username, password=password)
+    driver = MagiQtouch_Driver(
+        user=username,
+        password=password,
+        hass=hass,
+        config_entry=entry,
+    )
     coordinator = MagiQtouchCoordinator(hass, driver)
 
     hass.data.setdefault(DOMAIN, {})
@@ -53,8 +60,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         driver=driver,
         coordinator=coordinator,
     )
+
     driver.set_verbose(entry.options.get(CONF.VERBOSE, False), initial=True)
-    await driver.startup(hass)
+
+    if state := entry.data.get(CONF.SYS_STATE):
+        driver.set_system_state(SystemDetails.from_dict(state))
+    else:
+        _LOGGER.warning("CONF.SYS_STATE missing")
+        await driver.full_refresh(initial=True)
+
+    if zones := entry.data.get(CONF.ZONES):
+        driver.zone_list = [ZoneType(*cz) for cz in zones]
+    else:
+        _LOGGER.warning("CONF.ZONES missing")
+        await driver.full_refresh(initial=True)
+
+    if state := entry.data.get(CONF.STATE):
+        driver.current_state = RemoteStatus.from_dict(state)
+        driver.current_state.runningMode != ""
+    else:
+        _LOGGER.warning("CONF.STATE missing")
+        await driver.full_refresh(initial=True)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # listen for changes to the configuration options
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
@@ -64,7 +91,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 async def options_update_listener(hass, config_entry):
     """Handle options update."""
     driver = hass.data[DOMAIN][config_entry.entry_id]["driver"]
-    driver.set_verbose(config_entry.options[CONF.VERBOSE])
+    driver.set_verbose(config_entry.options.get(CONF.VERBOSE, False))
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):

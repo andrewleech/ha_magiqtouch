@@ -29,6 +29,7 @@ from .const import (
     MODE_HEATER_FAN,
     CONTROL_MODE_FAN,
     CONTROL_MODE_TEMP,
+    CONF,
     ZONE_TYPE_COMMON,
     ZONE_NONE,
     ZONE_COMMON,
@@ -50,9 +51,11 @@ _LOGGER = logging.getLogger("magiqtouch")
 
 
 class MagiQtouch_Driver:
-    def __init__(self, user, password):
+    def __init__(self, user, password, hass=None, config_entry=None):
         self._password = password
         self._user = user
+        self.hass = hass
+        self.config_entry = config_entry
 
         self._httpsession = None
         self.httpsession_created = False
@@ -69,7 +72,7 @@ class MagiQtouch_Driver:
 
         self.current_state: RemoteStatus = RemoteStatus()
         self.current_system_state: SystemDetails = SystemDetails()
-        self._zone_list: List[ZoneType] = []
+        self.zone_list: List[ZoneType] = []
         self._zone_coolers = dict()
         self._zone_heaters = dict()
 
@@ -77,17 +80,12 @@ class MagiQtouch_Driver:
         self._update_listener_override = None
 
         self.logged_in = False
-
+        self._config_update_required = False
         self.jobs: List[WebsocketJob] = []
-        # self.pending_setting: Optional[SettingJob] = None
-        # self.ws_handler_task = None
-
         self.verbose = True
 
     async def shutdown(self):
         _LOGGER.info("shutdown")
-        # if self.ws_handler_task:
-        #    self.ws_handler_task.cancel()
 
         if self.jobs:
             _LOGGER.info("Closing Websockets: self.ws")
@@ -122,20 +120,13 @@ class MagiQtouch_Driver:
                 self.httpsession_created = True
             return self._httpsession
 
-    async def startup(self, hass):
-        await self.login(hass)
+    async def startup(self):
+        await self.login()
         await self.get_system_details()
-        self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
-        self._refresh_msg = json.dumps(
-            {"action": "status", "params": {"device": self._mac_address}}
-        )
-        self.device_id = f"magiqtouch_{self._mac_address}"
-        self.device_name = "MagIQtouch"
 
-        await self.full_refresh(initial=True)
+        # await self.full_refresh(initial=True)
 
-    async def login(self, hass=None):
-        self.hass = hass
+    async def login(self):
         _LOGGER.info("Logging in...")
         try:
             # can also try
@@ -195,10 +186,8 @@ class MagiQtouch_Driver:
         return False
 
     async def ws_handler(self, job):
-        # while True:
         token = await self._get_token()
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
-        # async with aiohttp.ClientSession(trust_env=True) as session:
         counter = 0
         timeout = aiohttp.ClientWSTimeout(
             ws_receive=job.timeout or int(SCAN_INTERVAL.total_seconds() - 3),
@@ -323,12 +312,26 @@ class MagiQtouch_Driver:
                 if self.verbose:
                     _LOGGER.warning(f"Current System State: {json.dumps(redacted)}")
                 # parse the json into dataclass after its logged in case of errors
-                self.current_system_state = SystemDetails.from_dict(system_data)
+                new_system_state = SystemDetails.from_dict(system_data)
+                if new_system_state != self.current_system_state:
+                    self.set_system_state(new_system_state)
+                    self._config_update_required = True
         except Exception:
             _LOGGER.exception("failed to query devices/system")
             if redacted:
                 _LOGGER.error(f"Current System State: {json.dumps(redacted)}")
             raise
+
+    def set_system_state(self, state):
+        self.current_system_state = state
+        self._mac_address = self.current_system_state.Wifi_Module.MacAddressId
+        self._refresh_msg = json.dumps(
+            {"action": "status", "params": {"device": self._mac_address}}
+        )
+        self.device_id = f"magiqtouch_{self._mac_address}"
+        self.device_name = "MagiQtouch"
+        if self.config_entry:
+            self.device_name = self.config_entry.data.get(CONF.TITLE, self.device_name)
 
     async def _get_token(self):
         # Cognito isn't fully Async. Boto3 is eventually used and has blocking IO
@@ -357,7 +360,8 @@ class MagiQtouch_Driver:
     async def full_refresh(self, initial=False):
         _LOGGER.info("refresh")
         if not self.logged_in:
-            raise ValueError("Not logged in")
+            await self.startup()
+            initial = True
 
         ts = 0 if initial else self.current_state.timestamp
         if initial:
@@ -367,6 +371,25 @@ class MagiQtouch_Driver:
             checker = None
             timeout = 8
         await self.ws_send(self._refresh_msg, checker, timeout)
+        if initial or self._config_update_required:
+            self.update_zone_list()
+            await self.save_config_data()
+
+    async def save_config_data(self):
+        if self.hass and self.config_entry:
+            data = self.update_config_data({**self.config_entry.data})
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+            if self._config_update_required:
+                _LOGGER.warning("system state change detected, current state saved")
+                self._config_update_required = False
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
+    def update_config_data(self, data):
+        data[CONF.STATE] = self.current_state.to_dict()
+        data[CONF.SYS_STATE] = self.current_system_state.to_dict()
+        data[CONF.ZONES] = self.zone_list
+        data[CONF.TITLE] = self.device_name
+        return data
 
     def process_new_state(self, new_state):
         if self._update_listener_override:
@@ -430,19 +453,20 @@ class MagiQtouch_Driver:
         raise ValueError()
         return zone
 
-    @property
-    def zone_list(self) -> List[ZoneType]:
-        if not self._zone_list:
-            if self.current_system_state.NoOfZoneControls == 0:
-                return [ZONE_NONE]
-            self._zone_list = []
+    def update_zone_list(self) -> List[ZoneType]:
+        if self.current_system_state.NoOfZoneControls == 0:
+            zone_list = [ZONE_NONE]
+        else:
             # Always create a common / master entity
             zones: set[ZoneType] = {ZONE_COMMON}  # Use set to provide de-duplication
             for d in self.current_state.cooler + self.current_state.heater:
                 if d.zoneType != ZONE_TYPE_COMMON:
                     zones.add(ZoneType(d.zoneType, d.name))
-            self._zone_list.extend(list(zones))
-        return self._zone_list
+            zone_list = list(zones)
+        if zone_list != self.zone_list:
+            self.zone_list = zone_list
+            self._config_update_required = True
+        return self.zone_list
 
     @staticmethod
     def zone_match(dev, zone):
