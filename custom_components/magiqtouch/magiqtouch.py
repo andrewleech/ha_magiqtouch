@@ -560,15 +560,15 @@ class MagIQtouch_Driver:
         checker = partial(
             self.state_checker, units="hc", zone=zone, field="zoneOn", value=on_state
         )
-        if is_on:
-            # if any zone is on, system needs to be on
-            self.current_state.systemOn = True
-        else:
-            # if all zones are off, turn off system
-            all_dev = chain(self.current_state.cooler, self.current_state.heater)
-            if not [d for d in all_dev if d.zoneOn]:
-                _LOGGER.info("All zones off, turning system off")
-                self.current_state.systemOn = False
+        # if is_on:
+        #     # if any zone is on, system needs to be on
+        #     self.current_state.systemOn = True
+        # else:
+        #     # if all zones are off, turn off system
+        #     all_dev = chain(self.current_state.cooler, self.current_state.heater)
+        #     if not [d for d in all_dev if d.zoneOn]:
+        #         _LOGGER.info("All zones off, turning system off")
+        #         self.current_state.systemOn = False
 
         _LOGGER.info(f"set_zone_onoff {zone}={is_on} = {self.current_state}")
         await self.send_current_state(checker)
