@@ -18,9 +18,6 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
 
-from homeassistant.const import (
-    UnitOfTemperature,
-)
 from .const import (
     DOMAIN,
     ZONE_COMMON,
@@ -77,7 +74,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.label = label
         self.controller = controller
-        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_native_unit_of_measurement = controller.native_unit_of_measurement
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_device_info = {

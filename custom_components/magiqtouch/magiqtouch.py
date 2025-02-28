@@ -20,7 +20,11 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable, List
 
-from .structures import RemoteStatus, SystemDetails, Zone
+from homeassistant.const import (
+    UnitOfTemperature,
+)
+
+from .structures import RemoteStatus, SystemDetails, Zone, UnitDetails
 from .const import (
     SCAN_INTERVAL,
     MODE_COOLER,
@@ -492,7 +496,7 @@ class MagiQtouch_Driver:
 
         return self._zone_heaters[zone]
 
-    def active_device(self, zone=ZONE_NONE, state=None):
+    def active_device(self, zone=ZONE_NONE, state=None) -> UnitDetails:
         # if a zone has both heater and cooler, return the one
         # that matches system state.
         # Otherwise just return the device that's in zone.
@@ -522,6 +526,13 @@ class MagiQtouch_Driver:
             return devices[0]
         else:
             raise ValueError(f"active device unknown for '{zone}': {state}")
+
+    @property
+    def native_unit_of_measurement(self):
+        if self.active_device().temperature_units.lower() == "c":
+            return UnitOfTemperature.CELSIUS
+        else:
+            return UnitOfTemperature.FAHRENHEIT
 
     async def set_off(self):
         self.current_state.systemOn = False

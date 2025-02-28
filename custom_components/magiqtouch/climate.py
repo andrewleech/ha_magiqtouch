@@ -16,7 +16,6 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
-    UnitOfTemperature,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -191,7 +190,7 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement that is used."""
-        return UnitOfTemperature.CELSIUS
+        return self.controller.native_unit_of_measurement
 
     @property
     def precision(self):
