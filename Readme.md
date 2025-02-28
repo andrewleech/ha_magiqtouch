@@ -11,18 +11,26 @@ _Component to integrate with [MagiQtouch heating/cooling controllers][ha_magiqto
 Platform | Description
 -- | --
 `climate` | Heating / Cooling control.
+`sensor` | Temperature readings.
 
 
-{% if not installed %}
-## Installation
+### HACS
 
-1. Click install.
-1. In the HA UI go to "Configuration" -> "Integrations" click "+" and search for "Blueprint".
+Install HACS: https://www.hacs.xyz/docs/use/
 
-{% endif %}
+Add `https://github.com/andrewleech/ha_magiqtouch` as a [custom repository in hacs](https://www.hacs.xyz/docs/faq/custom_repositories/) of type: 'Integration'
+
+Back on the main HACS page you should now be able to find and install the MagIQtouch integration.
 
 
-## Configuration is done in the UI
+## Configuration
+In the HA devices section you should now be able to add a MagIQtouch device, it will then ask for a username/password which will be 
+the same ones used in the official Seeley phone app.
+
+
+### Disclaimer
+This package is in no way related to Seeley and they bear no responsibility over its use or maintenance. It has been developed completly 
+independantly. Please use the github issue tracker to discuss any issues.
 
 <!---->
 
