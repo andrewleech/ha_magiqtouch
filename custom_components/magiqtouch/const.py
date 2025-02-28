@@ -1,4 +1,4 @@
-"""Constants for the Seeley MagiQtouch integration."""
+"""Constants for the Seeley MagIQtouch integration."""
 from datetime import timedelta
 from collections import namedtuple
 from homeassistant.const import (

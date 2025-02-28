@@ -1,4 +1,4 @@
-"""The Seeley MagiQtouch integration."""
+"""The Seeley MagIQtouch integration."""
 import sys
 from pathlib import Path
 
@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
-from .magiqtouch import MagiQtouch_Driver
+from .magiqtouch import MagIQtouch_Driver
 from .const import (
     SCAN_INTERVAL,
     DOMAIN,
@@ -38,22 +38,22 @@ _LOGGER = logging.getLogger("magiqtouch")
 
 
 async def async_setup(hass: HomeAssistant, config: dict):
-    """Set up the Seeley MagiQtouch component."""
+    """Set up the Seeley MagIQtouch component."""
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up Seeley MagiQtouch from a config entry."""
+    """Set up Seeley MagIQtouch from a config entry."""
     username = entry.data[CONF.USERNAME]
     password = entry.data[CONF.PASSWORD]
 
-    driver = MagiQtouch_Driver(
+    driver = MagIQtouch_Driver(
         user=username,
         password=password,
         hass=hass,
         config_entry=entry,
     )
-    coordinator = MagiQtouchCoordinator(hass, driver)
+    coordinator = MagIQtouchCoordinator(hass, driver)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = dict(
@@ -110,17 +110,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     return unload_ok
 
 
-class MagiQtouchCoordinator(DataUpdateCoordinator):
-    """An update coordinator that handles updates for the entire MagiQtouch integration."""
+class MagIQtouchCoordinator(DataUpdateCoordinator):
+    """An update coordinator that handles updates for the entire MagIQtouch integration."""
 
-    controller: MagiQtouch_Driver
+    controller: MagIQtouch_Driver
 
     def __init__(self, hass, controller):
         """Initialize my coordinator."""
         super().__init__(
             hass,
             _LOGGER,
-            name="MagiQtouch",
+            name="MagIQtouch",
             update_interval=SCAN_INTERVAL,
         )
         self.controller = controller

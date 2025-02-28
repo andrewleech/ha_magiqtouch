@@ -1,4 +1,4 @@
-"""Config flow for Seeley MagiQtouch integration."""
+"""Config flow for Seeley MagIQtouch integration."""
 import logging
 from typing import Any, Dict
 
@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries, core, exceptions
 from homeassistant.core import callback
 
-from .magiqtouch import MagiQtouch_Driver
+from .magiqtouch import MagIQtouch_Driver
 from .const import DOMAIN, CONF  # pylint:disable=unused-import
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def validate_input(hass: core.HomeAssistant, data):
     #     your_validate_func, data[CONF.USERNAME], data[CONF.PASSWORD]
     # )
 
-    driver = MagiQtouch_Driver(user=data[CONF.USERNAME], password=data[CONF.PASSWORD])
+    driver = MagIQtouch_Driver(user=data[CONF.USERNAME], password=data[CONF.PASSWORD])
 
     try:
         if not await driver.login():
@@ -52,7 +52,7 @@ async def validate_input(hass: core.HomeAssistant, data):
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
-    """Handle a config flow for Seeley MagiQtouch."""
+    """Handle a config flow for Seeley MagIQtouch."""
 
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL

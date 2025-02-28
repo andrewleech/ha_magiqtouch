@@ -1,8 +1,8 @@
 """Platform for climate integration."""
 import logging
 
-from . import MagiQtouchCoordinator
-from .magiqtouch import MagiQtouch_Driver
+from . import MagIQtouchCoordinator
+from .magiqtouch import MagIQtouch_Driver
 from .structures import UnitDetails
 
 import voluptuous as vol
@@ -76,33 +76,33 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up device based on a config entry."""
-    driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
-    coordinator: MagiQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    driver: MagIQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
+    coordinator: MagIQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     async_add_entities(
-        [MagiQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list],
+        [MagIQtouch(entry.entry_id, driver, coordinator, zone) for zone in driver.zone_list],
         update_before_add=False,
     )
 
 
-class MagiQtouch(CoordinatorEntity, ClimateEntity):
+class MagIQtouch(CoordinatorEntity, ClimateEntity):
     """Representation of an MagIQtouch Thermostat."""
 
     def __init__(
         self,
         entry_id,
-        controller: MagiQtouch_Driver,
-        coordinator: MagiQtouchCoordinator,
+        controller: MagIQtouch_Driver,
+        coordinator: MagIQtouchCoordinator,
         zone=None,
     ):
-        self._attr_name = "MagiQtouch"
+        self._attr_name = "MagIQtouch"
         super().__init__(coordinator)
         self.controller = controller
         self.coordinator = coordinator
         self._attr_device_info = {
             "identifiers": {("magiqtouch", self.controller.device_id)},
             "name": self.controller.device_name,
-            "manufacturer": "Seeley",
+            "manufacturer": "alelec",
             # "model": "<installed model>",
         }
 
@@ -120,8 +120,8 @@ class MagiQtouch(CoordinatorEntity, ClimateEntity):
     def name(self):
         """Return the name of the device."""
         if not self.master_zone:
-            return f"MagiQtouch - {self.controller.get_zone_name(self.zone)}"
-        return "MagiQtouch"
+            return f"MagIQtouch - {self.controller.get_zone_name(self.zone)}"
+        return "MagIQtouch"
 
     @property
     def unique_id(self) -> str:

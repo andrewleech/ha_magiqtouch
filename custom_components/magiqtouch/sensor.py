@@ -1,7 +1,7 @@
 import logging
 
-from . import MagiQtouchCoordinator
-from .magiqtouch import MagiQtouch_Driver
+from . import MagIQtouchCoordinator
+from .magiqtouch import MagIQtouch_Driver
 
 
 # Import the device class from the component that you want to support
@@ -33,8 +33,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up device based on a config entry."""
-    driver: MagiQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
-    coordinator: MagiQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    driver: MagIQtouch_Driver = hass.data[DOMAIN][entry.entry_id]["driver"]
+    coordinator: MagIQtouchCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     sensors = []
 
@@ -66,8 +66,8 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         label,
-        controller: MagiQtouch_Driver,
-        coordinator: MagiQtouchCoordinator,
+        controller: MagIQtouch_Driver,
+        coordinator: MagIQtouchCoordinator,
         data_callback,
         zone=None,
     ):

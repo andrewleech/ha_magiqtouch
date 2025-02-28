@@ -4,7 +4,7 @@
 [![hacs][hacsbadge]][hacs]
 [![Project Maintenance][maintenance-shield]][user_profile]
 
-_Component to integrate with [MagiQtouch heating/cooling controllers][ha_magiqtouch]._
+_Component to integrate with [MagIQtouch heating/cooling controllers][ha_magiqtouch]._
 
 **This component will set up the following platforms.**
 

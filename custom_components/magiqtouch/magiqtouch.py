@@ -54,7 +54,7 @@ WebsocketUrl = "https://xs5z2412cf.execute-api.ap-southeast-2.amazonaws.com/prod
 _LOGGER = logging.getLogger("magiqtouch")
 
 
-class MagiQtouch_Driver:
+class MagIQtouch_Driver:
     def __init__(self, user, password, hass=None, config_entry=None):
         self._password = password
         self._user = user
@@ -333,7 +333,7 @@ class MagiQtouch_Driver:
             {"action": "status", "params": {"device": self._mac_address}}
         )
         self.device_id = f"magiqtouch_{self._mac_address}"
-        self.device_name = "MagiQtouch"
+        self.device_name = "MagIQtouch"
         if self.config_entry:
             self.device_name = self.config_entry.data.get(CONF.TITLE, self.device_name)
 
@@ -431,7 +431,7 @@ class MagiQtouch_Driver:
             if getattr(state, field) != value:
                 return False
         for u in check:
-            if not MagiQtouch_Driver.zone_match(u, zone):
+            if not MagIQtouch_Driver.zone_match(u, zone):
                 continue
             if getattr(u, field) != value:
                 return False
@@ -748,7 +748,7 @@ def main():
     user = args.email
     password = args.password
 
-    m = MagiQtouch_Driver(user=user, password=password)
+    m = MagIQtouch_Driver(user=user, password=password)
     m.set_verbose(True, initial=True)
 
     loop = asyncio.get_event_loop()
