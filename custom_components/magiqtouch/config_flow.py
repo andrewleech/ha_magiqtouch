@@ -32,7 +32,7 @@ async def validate_input(hass: core.HomeAssistant, data):
     #     your_validate_func, data[CONF.USERNAME], data[CONF.PASSWORD]
     # )
 
-    driver = MagIQtouch_Driver(user=data[CONF.USERNAME], password=data[CONF.PASSWORD])
+    driver = MagIQtouch_Driver(user=data[CONF.USERNAME], password=data[CONF.PASSWORD], hass=hass)
 
     try:
         if not await driver.login():

@@ -77,8 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     if state := entry.data.get(CONF.STATE):
         driver.current_state = RemoteStatus.from_dict(state)
-        driver.current_state.runningMode != ""
-    else:
+    if driver.current_state.runningMode == "":
         _LOGGER.warning("CONF.STATE missing")
         await driver.full_refresh(initial=True)
 

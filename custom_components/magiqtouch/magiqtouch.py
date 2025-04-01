@@ -377,7 +377,7 @@ class MagIQtouch_Driver:
         await self.ws_send(self._refresh_msg, checker, timeout)
         if initial or self._config_update_required:
             self.update_zone_list()
-            await self.save_config_data()
+            asyncio.create_task(self.save_config_data())
 
     async def save_config_data(self):
         if self.hass and self.config_entry:
@@ -401,7 +401,8 @@ class MagIQtouch_Driver:
             logger("State watching: %s" % new_state)
             return self._update_listener_override(new_state)
 
-        if self.verbose and new_state != self.current_state:
+        verbose = self.verbose or self.current_state.runningMode == ""
+        if verbose and new_state != self.current_state:
             _LOGGER.warning(f"Current State: {new_state}")
 
         self.current_state.update(new_state)
