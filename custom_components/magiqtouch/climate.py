@@ -283,6 +283,18 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                 return HVACAction.IDLE
 
         runningMode = self.controller.current_state.runningMode
+        
+        # Check if the active units are actually running
+        active_units = self.active_units
+        if active_units:
+            # Check if any of the active units are actually running
+            units_running = any(unit.runningState == "REQUIRED_RUNNING" for unit in active_units)
+            
+            if not units_running:
+                # System is on but units are not running (reached target temperature)
+                _LOGGER.debug("Units not running, returning IDLE")
+                return HVACAction.IDLE
+        
         hvac_action = {
             MODE_COOLER: HVACAction.COOLING,
             MODE_HEATER: HVACAction.HEATING,
@@ -290,11 +302,12 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
             MODE_HEATER_FAN: HVACAction.FAN,
         }.get(runningMode, HVACAction.IDLE)
 
-        _LOGGER.debug("runningMode: %s, hvac_action: %s", runningMode, hvac_action)
-
-        # if hvac_action not in self.hvac_actions:
-        #     _LOGGER.warning("hvac_action not sorted by zone, returning idle")
-        #     hvac_action = HVACAction.IDLE
+        _LOGGER.debug(
+            "runningMode: %s, units_running: %s, hvac_action: %s", 
+            runningMode, 
+            units_running if active_units else "N/A", 
+            hvac_action
+        )
 
         return hvac_action
 
