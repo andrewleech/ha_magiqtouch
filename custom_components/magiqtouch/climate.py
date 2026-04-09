@@ -363,7 +363,14 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                 elif state.runningMode in (MODE_COOLER_FAN, MODE_HEATER_FAN):
                     modes.append(HVACMode.FAN_ONLY)
             else:
-                modes.append(HVACMode.AUTO)
+                # When not available, show the same modes as the zone's capabilities
+                # instead of AUTO which confuses HomeKit
+                if self.heater:
+                    modes.append(HVACMode.HEAT)
+                if self.cooler:
+                    modes.append(HVACMode.COOL)
+                if self.heater or self.cooler:
+                    modes.append(HVACMode.FAN_ONLY)
 
         _LOGGER.debug(f"hvac_modes: {modes}")
         return modes
