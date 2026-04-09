@@ -133,22 +133,16 @@ class MagIQtouch_Driver:
     async def login(self):
         _LOGGER.info("Logging in...")
         try:
-            # can also try
-            # https://stackoverflow.com/questions/70503800/how-can-i-test-aws-cognito-protected-apis-in-python
-
             ## First, login to cognito with MagiqTouch user/pass
             self._cognito = Cognito(
                 user_pool_id=AWS_USER_POOL_ID,
                 client_id=cognito_userpool_client_id,
                 user_pool_region=AWS_REGION,
                 username=self._user,
-                # Dummy credentials to bypass EC2 IMDS
-                access_key="AKIAIOSFODNN7EXAMPLE",
-                secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                aiohttp_session=self.httpsession,
             )
 
-            # Cognito.authenticate() isn't fully async, Boto3 (used internally) has blocking IO
-            await asyncio.to_thread(asyncio.run, self._cognito.authenticate(self._password))
+            await self._cognito.authenticate(self._password)
 
         except Exception as ex:
             if "UserNotFoundException" in str(ex) or "NotAuthorizedException" in str(ex):
@@ -338,8 +332,7 @@ class MagIQtouch_Driver:
             self.device_name = self.config_entry.data.get(CONF.TITLE, self.device_name)
 
     async def _get_token(self):
-        # Cognito isn't fully Async. Boto3 is eventually used and has blocking IO
-        await asyncio.to_thread(asyncio.run, self._cognito.check_token(renew=True))
+        await self._cognito.check_token(renew=True)
         return self._cognito.id_token
 
     async def _get_auth(self, token=None):
