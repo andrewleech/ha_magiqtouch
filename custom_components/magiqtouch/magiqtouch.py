@@ -439,7 +439,9 @@ class MagIQtouch_Driver:
             checker = (lambda state: state.timestamp != ts,)
 
         _LOGGER.info("sending new settings")
-        await self.ws_send(jdata, checker)
+        if not await self.ws_send(jdata, checker):
+            # Command wasn't confirmed; refresh to resync local state with device
+            await self.background_refresh()
 
     def get_zone_name(self, zone):
         if not zone:
