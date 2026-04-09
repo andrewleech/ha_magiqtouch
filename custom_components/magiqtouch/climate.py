@@ -263,6 +263,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
+        # Round to whole degrees as MagIQtouch only supports integer temperatures
+        temperature = round(float(temperature))
         await self.controller.set_temperature(temperature, zone=self.zone)
 
     @property
