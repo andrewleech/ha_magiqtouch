@@ -275,7 +275,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
             return HVACAction.OFF
 
         # Show as off if individual zone is off
-        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_NONE:
+        if not self.master_zone and not self.master_mode_only_controller:
             zone_on = self.controller.get_zone_onoff(self.zone)
             if not zone_on:
                 _LOGGER.debug(HVACAction.OFF + " (zone)")
@@ -321,7 +321,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
             _LOGGER.debug(f"hvac_mode: {HVACMode.OFF}")
             return HVACMode.OFF
 
-        if (not self.master_mode_only_controller) and self.zone and self.zone != ZONE_NONE:
+        if not self.master_zone and not self.master_mode_only_controller:
             zone_on = self.controller.get_zone_onoff(self.zone)
             if not zone_on:
                 _LOGGER.debug(HVACAction.OFF + " (zone)")
