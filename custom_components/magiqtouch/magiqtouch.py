@@ -84,6 +84,7 @@ class MagIQtouch_Driver:
         self._update_listener_override = None
 
         self.logged_in = False
+        self._state_confirmed = False
         self._config_update_required = False
         self.jobs: List[WebsocketJob] = []
         self.verbose = True
@@ -399,6 +400,7 @@ class MagIQtouch_Driver:
             _LOGGER.warning(f"Current State: {new_state}")
 
         self.current_state.update(new_state)
+        self._state_confirmed = True
 
         if self._update_listener:
             _LOGGER.debug("State updated: %s" % new_state)
@@ -432,6 +434,12 @@ class MagIQtouch_Driver:
         return True
 
     async def send_current_state(self, checker, data=None):
+        if not self._state_confirmed:
+            # State was loaded from cache and hasn't been confirmed from the
+            # device yet. Refresh first to avoid sending stale zone/mode data.
+            _LOGGER.info("refreshing state from device before first command")
+            await self.ws_send(self._refresh_msg, lambda s: True, timeout=5)
+
         ts = self.current_state.timestamp
         data = data or self.new_remote_props()
         jdata = json.dumps(data)
