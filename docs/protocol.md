@@ -348,15 +348,13 @@ Source: `magiqtouch.py` lines 160-287.
 
 ---
 
-## 4. Partial State Commands (UNDER TEST)
+## 4. Partial State Commands
 
-> **WARNING: This section describes behavior that has been observed but is not yet verified for production use. Use at your own risk.**
+Partial state commands (sending only a subset of `RemoteStatus` fields) were tested but **do not work** for actual state changes.
 
-The server appears to accept command messages containing only a subset of the `RemoteStatus` fields, rather than requiring the full state object.
+### Test Results
 
-### Tested
-
-Sending a minimal command with only `device`, `timestamp`, and `systemOn`:
+A minimal command with only `device`, `timestamp`, and `systemOn` was sent:
 
 ```json
 {
@@ -364,21 +362,18 @@ Sending a minimal command with only `device`, `timestamp`, and `systemOn`:
     "params": {
         "device": "<mac_address>",
         "timestamp": 1710912802094,
-        "systemOn": false
+        "systemOn": true
     }
 }
 ```
 
-Result: the server accepted the command and responded with a full `RemoteStatus` object. Fields not included in the command were preserved at their existing values on the device.
+The command reached the device (confirmed by `touchCount` incrementing) but did not change state. No WebSocket response was received, and the device remained off. A subsequent no-op test (sending the same `systemOn` value as current state) also produced no response.
 
-### Not Yet Tested
+An earlier test appeared to show success (3 responses received), but these were background status stream messages coinciding with the command, not command confirmations.
 
-- Sending partial state with `systemOn: true` -- this would verify whether the device applies its own defaults for zone selection when powering on, rather than requiring the client to specify them.
-- Sending partial state with zone-level changes (e.g., modifying a single zone's `zoneOn` or `set_temp` without including all zones).
+### Conclusion
 
-### Implications
-
-If partial state commands work reliably, they could allow targeted updates without the risk of overwriting unrelated state. The current implementation sends the full state on every command, which can cause race conditions when the device state changes between the last read and the command send (see Section 7: Known Quirks).
+The server/device requires the full state blob to process a command. The full-state-overwrite model documented in Section 6 is required, not optional. This means the #35 issue (stale zone state being sent with `set_on`) cannot be solved by sending partial state.
 
 ---
 
