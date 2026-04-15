@@ -102,7 +102,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="Settings", options=user_input)
 
-        # Safe fallback for options
         current_options = self.config_entry.options or {}
 
         return self.async_show_form(

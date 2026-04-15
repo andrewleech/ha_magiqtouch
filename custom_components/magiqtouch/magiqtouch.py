@@ -692,7 +692,7 @@ class MagIQtouch_Driver:
         await self.send_current_state(checker)
 
     async def set_temperature(self, new_temp, zone=ZONE_NONE):
-        new_temp = int(new_temp)
+        new_temp = round(new_temp)
         if device := self.active_device(zone):
             device.set_temp = new_temp
             # checker = lambda state: self.active_device(state, zone).set_temp == new_temp
