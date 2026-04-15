@@ -1,5 +1,4 @@
 import datetime
-import json
 import aiohttp
 
 from jose import jwt, JWTError
@@ -26,9 +25,7 @@ class Cognito(object):
     def __init__(self, user_pool_id, client_id, user_pool_region=None,
                  username=None, id_token=None, access_token=None,
                  refresh_token=None, client_secret=None,
-                 aiohttp_session=None,
-                 # Legacy kwargs accepted but ignored (removed boto3 dependency)
-                 access_key=None, secret_key=None, client_callback=None):
+                 aiohttp_session=None):
         self.user_pool_id = user_pool_id
         self.client_id = client_id
         self.user_pool_region = user_pool_region or user_pool_id.split('_')[0]
