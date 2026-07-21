@@ -1,4 +1,5 @@
 """The Seeley MagIQtouch integration."""
+
 import sys
 from pathlib import Path
 

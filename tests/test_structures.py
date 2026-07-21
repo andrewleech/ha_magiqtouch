@@ -38,9 +38,7 @@ def test_remote_status_ignores_unknown_unit_field() -> None:
         }
     )
 
-    assert status.cooler == [
-        UnitDetails(name="Common", zoneType="COMMON", internal_temp=22.0)
-    ]
+    assert status.cooler == [UnitDetails(name="Common", zoneType="COMMON", internal_temp=22.0)]
 
 
 def test_remote_status_converts_declared_nested_dataclass() -> None:
@@ -60,9 +58,7 @@ def test_dataclass_from_dict_raises_for_missing_required_field() -> None:
 
 
 @pytest.mark.parametrize("equipment", ["cooler", "heater"])
-def test_remote_status_update_adds_new_unit(
-    equipment: str, make_unit
-) -> None:
+def test_remote_status_update_adds_new_unit(equipment: str, make_unit) -> None:
     common = make_unit()
     current = RemoteStatus(**{equipment: [common]})
     incoming_common = make_unit(internal_temp=23.0)
@@ -82,9 +78,7 @@ def test_remote_status_update_adds_new_unit(
 
 
 @pytest.mark.parametrize("equipment", ["cooler", "heater"])
-def test_remote_status_update_removes_missing_unit(
-    equipment: str, make_unit
-) -> None:
+def test_remote_status_update_removes_missing_unit(equipment: str, make_unit) -> None:
     common = make_unit()
     removed_zone = make_unit(name="Bedroom", zone_type="ZONE_1")
     current = RemoteStatus(**{equipment: [common, removed_zone]})
@@ -98,9 +92,7 @@ def test_remote_status_update_removes_missing_unit(
 
 
 @pytest.mark.parametrize("equipment", ["cooler", "heater"])
-def test_remote_status_update_reorders_by_stable_identity(
-    equipment: str, make_unit
-) -> None:
+def test_remote_status_update_reorders_by_stable_identity(equipment: str, make_unit) -> None:
     common = make_unit(internal_temp=20.0)
     bedroom = make_unit(name="Bedroom", zone_type="ZONE_1", internal_temp=21.0)
     current = RemoteStatus(**{equipment: [common, bedroom]})

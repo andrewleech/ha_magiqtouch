@@ -1,4 +1,5 @@
 """Platform for climate integration."""
+
 import logging
 import math
 
@@ -196,11 +197,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
 
     @staticmethod
     def _valid_internal_temperature(value):
-        return (
-            isinstance(value, (int, float))
-            and math.isfinite(value)
-            and -50 <= value < 100
-        )
+        return isinstance(value, (int, float)) and math.isfinite(value) and -50 <= value < 100
 
     def _temperature_units(self):
         return [
@@ -464,9 +461,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                 elif equipment == "heater":
                     await self.controller.set_heating_by_temperature(self.zone)
                 else:
-                    _LOGGER.warning(
-                        "Cannot determine active equipment for fan mode %s", fan_mode
-                    )
+                    _LOGGER.warning("Cannot determine active equipment for fan mode %s", fan_mode)
             elif fan_mode == FAN_SPEED_TO_PREV:
                 equipment = self._fan_control_equipment()
                 if equipment == "cooler":
@@ -474,9 +469,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                 elif equipment == "heater":
                     await self.controller.set_heating_by_speed(self.zone)
                 else:
-                    _LOGGER.warning(
-                        "Cannot determine active equipment for fan mode %s", fan_mode
-                    )
+                    _LOGGER.warning("Cannot determine active equipment for fan mode %s", fan_mode)
             else:
                 await self.controller.set_current_speed(fan_mode)
 

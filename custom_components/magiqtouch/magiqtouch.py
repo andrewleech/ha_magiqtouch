@@ -384,7 +384,7 @@ class MagIQtouch_Driver:
 
         ts = 0 if initial else self.current_state.timestamp
         if initial:
-            checker = lambda state: (state.runningMode and (state.timestamp != ts))
+            checker = lambda state: state.runningMode and (state.timestamp != ts)
             timeout = 12
         else:
             checker = None
@@ -563,7 +563,7 @@ class MagIQtouch_Driver:
 
     async def set_off(self):
         self.current_state.systemOn = False
-        checker = lambda state: (not state.systemOn)
+        checker = lambda state: not state.systemOn
         await self.send_current_state(checker)
 
     async def set_on(self):

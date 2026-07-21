@@ -226,9 +226,7 @@ def test_fan_control_remains_available_without_temperature_sensor(make_unit) -> 
 
 
 @pytest.mark.asyncio
-async def test_temperature_mode_is_rejected_without_temperature_sensor(
-    make_unit, caplog
-) -> None:
+async def test_temperature_mode_is_rejected_without_temperature_sensor(make_unit, caplog) -> None:
     entity, controller = make_entity(coolers=[make_unit(internal_temp=255.0)])
 
     with caplog.at_level(logging.WARNING, logger="magiqtouch"):

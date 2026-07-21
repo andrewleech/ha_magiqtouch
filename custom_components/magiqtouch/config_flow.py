@@ -1,4 +1,5 @@
 """Config flow for Seeley MagIQtouch integration."""
+
 import logging
 from typing import Any, Dict
 
