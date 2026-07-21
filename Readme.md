@@ -13,6 +13,11 @@ Platform | Description
 `climate` | Heating / Cooling control.
 `sensor` | Temperature readings.
 
+Evaporative coolers can use thermostat-driven temperature control or manual fan speeds when
+those capabilities are reported by the controller. If no valid room temperature is reported,
+the climate entity remains available with manual fan control and does not advertise thermostat
+modes.
+
 
 ### HACS
 
