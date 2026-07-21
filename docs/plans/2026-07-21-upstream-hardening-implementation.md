@@ -11,8 +11,12 @@ boundaries where cloud data enters the integration, make WebSocket outcomes expl
 coordinator refreshes, and route climate commands from reported equipment capabilities and
 running mode. Keep external Home Assistant temperature sensors as a later automation layer.
 
-**Tech stack:** Python 3.12, Home Assistant custom integration APIs, aiohttp, pytest,
-pytest-asyncio, Ruff, GitHub Actions.
+**Tech stack:** Python 3.11 on Windows and Python 3.12 in Linux CI, Home Assistant custom
+integration APIs, aiohttp, pytest, pytest-asyncio, Ruff, GitHub Actions.
+
+**Windows compatibility note:** Home Assistant 2024.2.5 pins `ciso8601==2.3.0`, which has a
+Windows wheel for Python 3.11 but not Python 3.12. Use Python 3.11 for the local Windows test
+environment; Linux CI may use Python 3.12 because a compiler is available there.
 
 ---
 
@@ -26,7 +30,7 @@ pytest-asyncio, Ruff, GitHub Actions.
 
 **Step 1: Declare test dependencies and configuration**
 
-Add a `test` optional dependency group containing `pytest` and `pytest-asyncio`. Add pytest
+Add a `test` optional dependency group containing `pytest`, `pytest-asyncio`, and Ruff. Add pytest
 configuration with `testpaths = ["tests"]` and `asyncio_mode = "auto"`. Add `.venv/` to
 `.gitignore`.
 
@@ -46,14 +50,14 @@ Keep payloads synthetic and free of device IDs, credentials, or captured custome
 Run:
 
 ```powershell
-$py = 'C:\Users\JLowes\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+$py = '<path-to-python-3.11>'
 & $py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
 ```
 
-Expected: installation succeeds under Python 3.12. Do not use the machine's Python 3.14 because
-the repository currently pins Home Assistant 2024.2.5.
+Expected: installation succeeds under Python 3.11 on Windows. Do not use the machine's Python
+3.14 because the repository currently pins Home Assistant 2024.2.5.
 
 **Step 4: Verify test discovery**
 
@@ -421,4 +425,3 @@ then the full suite.
 Report the branch, commits, exact test results, remaining live-controller verification, and the
 vendored dependency follow-up. Do not push or open a pull request without the user's explicit
 authorization.
-
