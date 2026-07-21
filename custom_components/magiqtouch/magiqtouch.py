@@ -163,7 +163,7 @@ class MagIQtouch_Driver:
             message=message,
             checker=checker,
             status=0,
-            timeout=time.time() + timeout,
+            timeout=timeout,
         )
 
         _LOGGER.info(f"ws send: {message}")
@@ -188,17 +188,31 @@ class MagIQtouch_Driver:
         token = await self._get_token()
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
         counter = 0
-        timeout = aiohttp.ClientWSTimeout(
-            ws_receive=job.timeout or int(SCAN_INTERVAL.total_seconds() - 3),
-            ws_close=None,
-        )
+        received_states = 0
+        background_job = job.checker is None
+        receive_timeout = job.timeout or int(SCAN_INTERVAL.total_seconds() - 3)
+        client_ws_timeout = getattr(aiohttp, "ClientWSTimeout", None)
+        if client_ws_timeout:
+            timeout_kwargs = {
+                "timeout": client_ws_timeout(
+                    ws_receive=receive_timeout,
+                    ws_close=None,
+                )
+            }
+        else:
+            # aiohttp < 3.12 uses a separate receive_timeout parameter.
+            timeout_kwargs = {
+                "timeout": receive_timeout,
+                "receive_timeout": receive_timeout,
+            }
+        ws = None
         try:
             async with self.httpsession.ws_connect(
                 WebsocketUrl + token,
                 headers=headers,
                 autoping=False,
                 autoclose=True,
-                timeout=timeout,
+                **timeout_kwargs,
             ) as ws:
                 _LOGGER.info(f"websocket connected: {self.jobs}")
 
@@ -239,6 +253,7 @@ class MagIQtouch_Driver:
                                 job.status = "confirmed"
                                 job.checker = None
                                 self.process_new_state(status)
+                                received_states += 1
 
                                 # This was a set / control message, restart refresh websocket
                                 if job.message != self._refresh_msg:
@@ -250,16 +265,12 @@ class MagIQtouch_Driver:
                                 if isinstance(job.status, int):
                                     job.status += 1
                         else:
-                            try:
-                                self.process_new_state(status)
-                            except:
-                                _LOGGER.exception("process_new_state failed")
-                            else:
-                                _LOGGER.info("state processed")
+                            self.process_new_state(status)
+                            received_states += 1
+                            _LOGGER.info("state processed")
 
                     elif msg.type == aiohttp.WSMsgType.ERROR:
-                        _LOGGER.warning(msg)
-                        break
+                        raise aiohttp.ClientConnectionError(str(msg))
                     else:
                         _LOGGER.warning(f"ws unexpected: {msg}")
 
@@ -269,24 +280,34 @@ class MagIQtouch_Driver:
                         _LOGGER.info("cognito refresh")
                         break
 
-        except aiohttp.client_exceptions.ClientConnectionResetError:
-            if ws and not ws.closed:
-                raise
+            if job.checker is not None or (background_job and received_states == 0):
+                raise asyncio.TimeoutError
+        except aiohttp.ClientConnectionError:
+            _LOGGER.exception("websocket connection failed")
+            raise
         except asyncio.CancelledError:
-            # Shutting Down
-            return
-        except RuntimeError as ex:
-            if "Session is closed" in str(ex):
-                # Shutting Down
-                return
-            _LOGGER.exception("websocket")
+            raise
         except asyncio.TimeoutError:
-            _LOGGER.exception(f"websocket timeout {timeout} after {counter} messages.")
-        except:
+            if background_job and received_states:
+                _LOGGER.debug(
+                    "background websocket closed after %s seconds and %s states",
+                    receive_timeout,
+                    received_states,
+                )
+            else:
+                _LOGGER.warning(
+                    "websocket timeout after %s seconds and %s messages",
+                    receive_timeout,
+                    counter,
+                )
+                raise
+        except Exception:
             _LOGGER.exception("websocket")
-        if job in self.jobs:
-            self.jobs.remove(job)
-        _LOGGER.info("websocket has closed")
+            raise
+        finally:
+            if job in self.jobs:
+                self.jobs.remove(job)
+            _LOGGER.info("websocket has closed")
 
     async def logout(self):
         # TODO does an actually logout help?

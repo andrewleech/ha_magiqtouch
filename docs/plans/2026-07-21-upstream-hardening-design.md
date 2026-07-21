@@ -65,7 +65,9 @@ CI will run the test suite and Ruff alongside the existing HACS and hassfest val
 ### 2. WebSocket request lifecycle
 
 Timeouts are durations, not wall-clock timestamps. A request job will retain the configured
-timeout duration and pass it to `aiohttp.ClientWSTimeout.ws_receive` unchanged.
+timeout duration and pass it to the installed aiohttp receive-timeout API unchanged. aiohttp
+3.12+ uses `ClientWSTimeout.ws_receive`; the repository's pinned aiohttp 3.9 uses the legacy
+`receive_timeout` argument, so the driver will support both contracts.
 
 If a receive timeout occurs, the request must fail visibly. The WebSocket handler will re-raise
 `asyncio.TimeoutError` after cleanup so `ws_send` can return `False`. A refresh that receives
