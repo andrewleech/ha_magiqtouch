@@ -371,7 +371,7 @@ class MagIQtouch_Driver:
             return asyncio.create_task(co)
 
     async def refresh_state(self):
-        await self.background_refresh()
+        return await self.full_refresh()
 
     async def background_refresh(self):
         self.create_task(self.full_refresh())
@@ -389,7 +389,8 @@ class MagIQtouch_Driver:
         else:
             checker = None
             timeout = 8
-        await self.ws_send(self._refresh_msg, checker, timeout)
+        if not await self.ws_send(self._refresh_msg, checker, timeout):
+            raise asyncio.TimeoutError("MagIQtouch state refresh was not confirmed")
         if initial or self._config_update_required:
             self.update_zone_list()
             asyncio.create_task(self.save_config_data())
@@ -459,7 +460,8 @@ class MagIQtouch_Driver:
             # State was loaded from cache and hasn't been confirmed from the
             # device yet. Refresh first to avoid sending stale zone/mode data.
             _LOGGER.info("refreshing state from device before first command")
-            await self.ws_send(self._refresh_msg, lambda s: True, timeout=5)
+            if not await self.ws_send(self._refresh_msg, lambda s: True, timeout=5):
+                raise asyncio.TimeoutError("Could not confirm state before command")
 
         ts = self.current_state.timestamp
         data = data or self.new_remote_props()

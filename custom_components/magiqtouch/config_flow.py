@@ -37,14 +37,14 @@ async def validate_input(hass: core.HomeAssistant, data):
     try:
         if not await driver.login():
             raise InvalidAuth
+    except InvalidAuth:
+        raise
     except Exception as e:
-        import traceback
-
-        trace_text = traceback.format_exc()
-        _LOGGER.error(f"Could not connect: {str(e)} {trace_text}")
-        if "InvalidSignatureException" in trace_text:
-            raise InvalidTime
-        raise CannotConnect
+        error_text = f"{type(e).__name__}: {e}"
+        _LOGGER.debug("Could not connect to MagIQtouch: %s", error_text)
+        if "InvalidSignatureException" in error_text:
+            raise InvalidTime from e
+        raise CannotConnect from e
 
     # Return info that you want to store in the config entry.
     await driver.startup()

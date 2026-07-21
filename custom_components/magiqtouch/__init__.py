@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 from .magiqtouch import MagIQtouch_Driver
 from .const import (
@@ -140,4 +141,9 @@ class MagIQtouchCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(
                 "Updating the state failed, will retry with login: %s(%s)" % (type(ex), ex)
             )
-            await self.controller.login()
+            if not await self.controller.login():
+                raise UpdateFailed("MagIQtouch reauthentication failed") from ex
+            try:
+                return await self.controller.refresh_state()
+            except Exception as retry_ex:
+                raise UpdateFailed("MagIQtouch state refresh failed after login") from retry_ex

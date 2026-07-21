@@ -3,7 +3,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import aiohttp
 import pytest
@@ -171,3 +171,27 @@ async def test_unexpected_websocket_error_propagates_and_cleans_up(driver, monke
         await driver.ws_handler(job)
 
     assert driver.jobs == []
+
+
+@pytest.mark.asyncio
+async def test_full_refresh_raises_when_no_state_is_received(driver) -> None:
+    driver.logged_in = True
+    driver.ws_send = AsyncMock(return_value=False)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await driver.full_refresh()
+
+
+@pytest.mark.asyncio
+async def test_failed_pre_command_refresh_prevents_stale_command(driver) -> None:
+    driver._state_confirmed = False
+    driver.ws_send = AsyncMock(return_value=False)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await driver.send_current_state(lambda state: True)
+
+    driver.ws_send.assert_awaited_once_with(
+        driver._refresh_msg,
+        ANY,
+        timeout=5,
+    )
