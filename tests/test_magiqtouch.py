@@ -3,7 +3,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import aiohttp
 import pytest
@@ -195,3 +195,18 @@ async def test_failed_pre_command_refresh_prevents_stale_command(driver) -> None
         ANY,
         timeout=5,
     )
+
+
+@pytest.mark.asyncio
+async def test_background_refresh_contains_task_failure(driver, caplog) -> None:
+    tasks = []
+    driver.full_refresh = AsyncMock(side_effect=RuntimeError("synthetic refresh failure"))
+    driver.create_task = Mock(
+        side_effect=lambda coroutine: tasks.append(asyncio.create_task(coroutine))
+    )
+
+    with caplog.at_level("WARNING", logger="magiqtouch"):
+        await driver.background_refresh()
+        await tasks[0]
+
+    assert "background refresh failed" in caplog.text.lower()

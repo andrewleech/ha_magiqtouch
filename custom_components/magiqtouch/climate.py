@@ -1,7 +1,6 @@
 """Platform for climate integration."""
 
 import logging
-import math
 
 from . import MagIQtouchCoordinator
 from .magiqtouch import MagIQtouch_Driver
@@ -43,6 +42,7 @@ from .const import (
     CONTROL_MODE_TEMP,
     ZONE_COMMON,
     ZONE_NONE,
+    is_valid_temperature,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -195,17 +195,15 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         """Return units matching the current mode, falling back to installed equipment."""
         return self.active_units or self.inactive_units or self.cooler or self.heater
 
-    @staticmethod
-    def _valid_internal_temperature(value):
-        return isinstance(value, (int, float)) and math.isfinite(value) and -50 <= value < 100
-
-    def _temperature_units(self):
+    def _sensed_units(self):
         return [
             unit
             for unit in self._relevant_units()
-            if self._valid_internal_temperature(unit.internal_temp)
-            and unit.min_temp < unit.max_temp
+            if is_valid_temperature(unit.internal_temp, self.temperature_unit)
         ]
+
+    def _temperature_units(self):
+        return [unit for unit in self._sensed_units() if unit.min_temp < unit.max_temp]
 
     @property
     def temperature_unit(self):
@@ -223,7 +221,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        values = [unit.internal_temp for unit in self._temperature_units()]
+        values = [unit.internal_temp for unit in self._sensed_units()]
         if not values:
             return None
         return sum(values) / len(values)

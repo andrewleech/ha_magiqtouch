@@ -374,7 +374,15 @@ class MagIQtouch_Driver:
         return await self.full_refresh()
 
     async def background_refresh(self):
-        self.create_task(self.full_refresh())
+        self.create_task(self._run_background_refresh())
+
+    async def _run_background_refresh(self):
+        try:
+            await self.full_refresh()
+        except asyncio.CancelledError:
+            raise
+        except Exception as ex:
+            _LOGGER.warning("Background refresh failed: %s", ex)
 
     async def full_refresh(self, initial=False):
         _LOGGER.info("refresh")

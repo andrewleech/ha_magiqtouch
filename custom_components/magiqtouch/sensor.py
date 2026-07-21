@@ -22,6 +22,7 @@ from .const import (
     DOMAIN,
     ZONE_COMMON,
     ZONE_NONE,
+    is_valid_temperature,
 )
 
 _LOGGER = logging.getLogger("magiqtouch")
@@ -87,8 +88,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         self.zone = zone
         self.master_zone = (not self.zone) or self.zone in (ZONE_NONE, ZONE_COMMON)
 
-        self._attr_native_value = 0
-        self._attr_available = False
+        self._attr_native_value = None
 
     @property
     def name(self):
@@ -101,11 +101,21 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # self._attr_is_on = self.coordinator.data[self.idx]["state"]
         _LOGGER.debug("coordinator updated")
-        self._attr_native_value = self.data_callback(self.zone)
-        self._attr_available = True
+        try:
+            value = self.data_callback(self.zone)
+        except (AttributeError, IndexError, TypeError, ValueError) as ex:
+            _LOGGER.debug("Temperature reading unavailable: %s", ex)
+            value = None
+        self._attr_native_value = (
+            value if is_valid_temperature(value, self._attr_native_unit_of_measurement) else None
+        )
         self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return whether the coordinator and this temperature reading are available."""
+        return super().available and self._attr_native_value is not None
 
     @property
     def unique_id(self) -> str:

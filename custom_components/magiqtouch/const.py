@@ -1,9 +1,12 @@
 """Constants for the Seeley MagIQtouch integration."""
+
+import math
 from datetime import timedelta
 from collections import namedtuple
 from homeassistant.const import (
     CONF_USERNAME,
     CONF_PASSWORD,
+    UnitOfTemperature,
 )
 
 DOMAIN = "magiqtouch"
@@ -41,3 +44,12 @@ ZONE_TYPE_COMMON = "COMMON"
 
 ZONE_NONE = ZoneType(ZONE_TYPE_NONE, None)
 ZONE_COMMON = ZoneType(ZONE_TYPE_COMMON, None)
+
+
+def is_valid_temperature(value, unit) -> bool:
+    """Return whether a controller temperature is plausible rather than a sentinel."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return False
+    if unit == UnitOfTemperature.FAHRENHEIT:
+        return -58 <= value < 212
+    return -50 <= value < 100

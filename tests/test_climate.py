@@ -32,6 +32,7 @@ def make_entity(
     system_on=True,
     cooler_fan=True,
     heater_fan=True,
+    temperature_unit=UnitOfTemperature.CELSIUS,
 ):
     coolers = list(coolers or [])
     heaters = list(heaters or [])
@@ -51,7 +52,7 @@ def make_entity(
         device_id="synthetic-device",
         device_name="Synthetic MagIQtouch",
         current_state=state,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        native_unit_of_measurement=temperature_unit,
         logged_in=True,
         available_coolers=Mock(side_effect=lambda zone: coolers),
         available_heaters=Mock(side_effect=lambda zone: heaters),
@@ -180,6 +181,28 @@ def test_current_temperature_returns_valid_reading(make_unit) -> None:
     entity, _ = make_entity(coolers=[make_unit(internal_temp=22.0)])
 
     assert entity.current_temperature == 22.0
+
+
+def test_current_temperature_does_not_require_target_limits(make_unit) -> None:
+    unit = make_unit(internal_temp=22.0)
+    unit.min_temp = 0.0
+    unit.max_temp = 0.0
+    entity, _ = make_entity(coolers=[unit])
+
+    assert entity.current_temperature == 22.0
+    assert entity.target_temperature is None
+
+
+def test_valid_fahrenheit_temperature_above_100_is_reported(make_unit) -> None:
+    unit = make_unit(internal_temp=105.0)
+    unit.min_temp = 60.0
+    unit.max_temp = 90.0
+    entity, _ = make_entity(
+        coolers=[unit],
+        temperature_unit=UnitOfTemperature.FAHRENHEIT,
+    )
+
+    assert entity.current_temperature == 105.0
 
 
 def test_current_temperature_averages_only_valid_readings(make_unit) -> None:
