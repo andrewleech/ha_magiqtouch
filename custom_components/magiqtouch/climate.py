@@ -1,5 +1,6 @@
 """Platform for climate integration."""
 import logging
+import math
 
 from . import MagIQtouchCoordinator
 from .magiqtouch import MagIQtouch_Driver
@@ -58,7 +59,8 @@ HVAC_MODES = [HVACMode.OFF, HVACMode.COOL, HVACMode.FAN_ONLY, HVACMode.HEAT]
 
 FAN_SPEED_BY_TEMP = "Temperature"
 FAN_SPEED_TO_PREV = "Previous"
-FAN_SPEEDS = [FAN_SPEED_BY_TEMP, FAN_SPEED_TO_PREV] + [str(spd + 1) for spd in range(10)]
+MANUAL_FAN_SPEEDS = [str(spd + 1) for spd in range(10)]
+FAN_SPEEDS = [FAN_SPEED_BY_TEMP, FAN_SPEED_TO_PREV] + MANUAL_FAN_SPEEDS
 
 PRESET_FAN_FRESH = "Fan: Fresh Air"
 PRESET_FAN_RECIRC = "Fan: Recirculate"
@@ -155,10 +157,11 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def supported_features(self):
         """Return the list of supported features for this entity."""
+        self._init_units()
         features = ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
         if self.master_zone:
             features |= ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE
-        if not self.master_mode_only_controller:
+        if not self.master_mode_only_controller and self._temperature_units():
             features |= ClimateEntityFeature.TARGET_TEMPERATURE
         return features
 
@@ -187,6 +190,26 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         else:
             return []
 
+    def _relevant_units(self):
+        """Return units matching the current mode, falling back to installed equipment."""
+        return self.active_units or self.inactive_units or self.cooler or self.heater
+
+    @staticmethod
+    def _valid_internal_temperature(value):
+        return (
+            isinstance(value, (int, float))
+            and math.isfinite(value)
+            and -50 <= value < 100
+        )
+
+    def _temperature_units(self):
+        return [
+            unit
+            for unit in self._relevant_units()
+            if self._valid_internal_temperature(unit.internal_temp)
+            and unit.min_temp < unit.max_temp
+        ]
+
     @property
     def temperature_unit(self):
         """Return the unit of measurement that is used."""
@@ -203,45 +226,31 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        units = self.active_units or self.inactive_units
-        if len(units) > 1:
-            itemps = [u.internal_temp for u in units if u.internal_temp < 100]
-            current = sum(itemps) / len(itemps)
-        else:
-            current = units[0].internal_temp
-        if current > 100:
-            # No sensor
-            try:
-                # report common zone if it exists
-                current = self.controller.active_device(ZONE_COMMON).internal_temp
-            except:
-                current = self.target_temperature
-        return current
+        values = [unit.internal_temp for unit in self._temperature_units()]
+        if not values:
+            return None
+        return sum(values) / len(values)
 
     @property
     def target_temperature(self):
         """Return the temperature we try to reach."""
-        units = self.active_units or self.inactive_units
-        return units[0].set_temp
-        # return self.controller.active_device(self.zone).set_temp
+        units = self._temperature_units()
+        if not units:
+            return None
+        unit = units[0]
+        if unit.min_temp <= unit.set_temp <= unit.max_temp:
+            return unit.set_temp
+        return None
 
     @property
     def max_temp(self):
-        units = self.active_units or self.inactive_units
-        return units[0].max_temp
-        # try:
-        #     return self.controller.active_device(self.zone).max_temp
-        # except:
-        #     return 35
+        units = self._temperature_units()
+        return units[0].max_temp if units else None
 
     @property
     def min_temp(self):
-        units = self.active_units or self.inactive_units
-        return units[0].min_temp
-        # try:
-        #     return self.controller.active_device(self.zone).min_temp
-        # except:
-        #     return 7
+        units = self._temperature_units()
+        return units[0].min_temp if units else None
 
     async def async_turn_on(self):
         # If turning any zone on, ensure system is on
@@ -347,7 +356,9 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         modes = [HVACMode.OFF]
 
         if self.master_zone:
-            modes.append(HVACMode.FAN_ONLY)
+            fan = self.controller.current_state.fan
+            if fan.cooler_available or fan.heater_available:
+                modes.append(HVACMode.FAN_ONLY)
             if self.heater:
                 modes.append(HVACMode.HEAT)
             if self.cooler:
@@ -408,28 +419,64 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
-        return FAN_SPEEDS
+        if self._temperature_units():
+            return FAN_SPEEDS
+        return MANUAL_FAN_SPEEDS
 
     @property
     def fan_mode(self):
         """Return the current fan modes."""
-        if self.controller.active_device(self.zone).control_mode == CONTROL_MODE_TEMP:
+        device = self.controller.active_device(self.zone)
+        if not device:
+            return None
+        if device.control_mode == CONTROL_MODE_TEMP:
             # running in temperature set point mode
             return FAN_SPEED_BY_TEMP
-        speed = str(self.controller.active_device(self.zone).fan_speed)
+        speed = str(device.fan_speed)
         if speed == "0":
-            return FAN_SPEED_BY_TEMP
+            return FAN_SPEED_BY_TEMP if self._temperature_units() else None
         return speed
 
+    def _fan_control_equipment(self):
+        running_mode = self.controller.current_state.runningMode
+        if running_mode in (MODE_COOLER, MODE_COOLER_FAN) and self.cooler:
+            return "cooler"
+        if running_mode in (MODE_HEATER, MODE_HEATER_FAN) and self.heater:
+            return "heater"
+
+        has_cooler = bool(self.cooler)
+        has_heater = bool(self.heater)
+        if has_cooler and not has_heater:
+            return "cooler"
+        if has_heater and not has_cooler:
+            return "heater"
+        return None
+
     async def async_set_fan_mode(self, fan_mode):
-        if str(fan_mode) not in FAN_SPEEDS:
+        if str(fan_mode) not in self.fan_modes:
             _LOGGER.warning("Unknown fan speed: %s" % fan_mode)
         else:
             _LOGGER.debug("Set fan to: %s" % fan_mode)
             if fan_mode == FAN_SPEED_BY_TEMP:
-                await self.controller.set_cooling_by_temperature(self.zone)
+                equipment = self._fan_control_equipment()
+                if equipment == "cooler":
+                    await self.controller.set_cooling_by_temperature(self.zone)
+                elif equipment == "heater":
+                    await self.controller.set_heating_by_temperature(self.zone)
+                else:
+                    _LOGGER.warning(
+                        "Cannot determine active equipment for fan mode %s", fan_mode
+                    )
             elif fan_mode == FAN_SPEED_TO_PREV:
-                await self.controller.set_cooling_by_speed(self.zone)
+                equipment = self._fan_control_equipment()
+                if equipment == "cooler":
+                    await self.controller.set_cooling_by_speed(self.zone)
+                elif equipment == "heater":
+                    await self.controller.set_heating_by_speed(self.zone)
+                else:
+                    _LOGGER.warning(
+                        "Cannot determine active equipment for fan mode %s", fan_mode
+                    )
             else:
                 await self.controller.set_current_speed(fan_mode)
 
@@ -482,10 +529,12 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         """
         presets = [PRESET_NONE]
         cur_state = self.controller.current_state
+        temperature_control = bool(self._temperature_units())
         # sys_state = self.controller.current_system_state
         # if sys_state.Heater.InSystem:
         if self.controller.available_heaters(self.zone):
-            presets.append(PRESET_HEAT_TEMP)
+            if temperature_control:
+                presets.append(PRESET_HEAT_TEMP)
             # presets.append(PRESET_HEAT_FAN_SPEED)
             if cur_state.fan.heater_available:
                 presets.append(PRESET_FAN_RECIRC)
@@ -495,7 +544,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         # if sys_state.System.cooler.available or sys_state.AOCFixed.InSystem
         #        or sys_state.AOCInverter.InSystem:
         if self.controller.available_coolers(self.zone):
-            presets.append(PRESET_COOL_TEMP)
+            if temperature_control:
+                presets.append(PRESET_COOL_TEMP)
             if self.controller.current_state.installed.evap:
                 presets.append(PRESET_COOL_FAN_SPEED)
             if cur_state.fan.cooler_available:
