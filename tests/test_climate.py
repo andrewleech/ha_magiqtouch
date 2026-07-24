@@ -62,6 +62,14 @@ def make_entity(
         set_heating_by_temperature=AsyncMock(),
         set_heating_by_speed=AsyncMock(),
         set_current_speed=AsyncMock(),
+        set_fan_only=AsyncMock(),
+        set_fan_only_evap=AsyncMock(),
+        set_fan_only_heater=AsyncMock(),
+        set_cooling=AsyncMock(),
+        set_heating=AsyncMock(),
+        set_on=AsyncMock(),
+        set_off=AsyncMock(),
+        set_temperature=AsyncMock(),
     )
 
     def active_device(zone):
@@ -168,15 +176,6 @@ async def test_off_combined_system_does_not_guess_equipment(make_unit, caplog) -
     assert "cannot determine active equipment" in caplog.text.lower()
 
 
-@pytest.mark.asyncio
-async def test_numeric_fan_mode_keeps_existing_speed_command(make_unit) -> None:
-    entity, controller = make_entity(coolers=[make_unit()])
-
-    await entity.async_set_fan_mode("5")
-
-    controller.set_current_speed.assert_awaited_once_with("5")
-
-
 def test_current_temperature_returns_valid_reading(make_unit) -> None:
     entity, _ = make_entity(coolers=[make_unit(internal_temp=22.0)])
 
@@ -257,3 +256,67 @@ async def test_temperature_mode_is_rejected_without_temperature_sensor(make_unit
 
     controller.set_cooling_by_temperature.assert_not_called()
     assert "unknown fan speed" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_target_temperature_selects_evap_temperature_control(make_unit) -> None:
+    entity, controller = make_entity(coolers=[make_unit(control_mode="FAN", fan_speed=5)])
+
+    await entity.async_set_temperature(temperature=25)
+
+    controller.set_cooling_by_temperature.assert_awaited_once_with(entity.zone, 25)
+    controller.set_temperature.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_numeric_speed_selects_manual_evap_cooling(make_unit) -> None:
+    entity, controller = make_entity(
+        coolers=[make_unit(control_mode="TEMP")],
+        running_mode=MODE_COOLER,
+    )
+
+    await entity.async_set_fan_mode("7")
+
+    controller.set_cooling_by_speed.assert_awaited_once_with(entity.zone, "7")
+    controller.set_current_speed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_numeric_speed_in_air_only_retains_air_only(make_unit) -> None:
+    entity, controller = make_entity(
+        coolers=[make_unit()],
+        running_mode=MODE_COOLER_FAN,
+    )
+
+    await entity.async_set_fan_mode("6")
+
+    controller.set_current_speed.assert_awaited_once_with("6", zone=entity.zone)
+    controller.set_cooling_by_speed.assert_not_called()
+
+
+def test_air_only_offers_manual_fan_speeds(make_unit) -> None:
+    entity, _ = make_entity(
+        coolers=[make_unit()],
+        running_mode=MODE_COOLER_FAN,
+    )
+
+    assert entity.fan_modes == [str(speed) for speed in range(1, 11)]
+
+
+def test_air_only_reports_manual_fan_speed(make_unit) -> None:
+    entity, _ = make_entity(
+        coolers=[make_unit(control_mode="TEMP", fan_speed=6)],
+        running_mode=MODE_COOLER_FAN,
+    )
+
+    assert entity.fan_mode == "6"
+
+
+@pytest.mark.asyncio
+async def test_evap_only_fan_mode_explicitly_selects_fresh_air(make_unit) -> None:
+    entity, controller = make_entity(coolers=[make_unit()])
+
+    await entity.async_set_hvac_mode(HVACMode.FAN_ONLY)
+
+    controller.set_fan_only_evap.assert_awaited_once_with(entity.zone)
+    controller.set_fan_only_heater.assert_not_called()

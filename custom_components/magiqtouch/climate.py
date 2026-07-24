@@ -269,7 +269,13 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
             return
         # Round to whole degrees as MagIQtouch only supports integer temperatures
         temperature = round(float(temperature))
-        await self.controller.set_temperature(temperature, zone=self.zone)
+        equipment = self._fan_control_equipment()
+        if equipment == "cooler":
+            await self.controller.set_cooling_by_temperature(self.zone, temperature)
+        elif equipment == "heater":
+            await self.controller.set_heating_by_temperature(self.zone, temperature)
+        else:
+            _LOGGER.warning("Cannot determine equipment for target temperature")
 
     @property
     def hvac_action(self):
@@ -391,7 +397,12 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
 
         elif self.master_zone:
             if hvac_mode == HVACMode.FAN_ONLY:
-                await self.controller.set_fan_only(self.zone)
+                if self.cooler and not self.heater:
+                    await self.controller.set_fan_only_evap(self.zone)
+                elif self.heater and not self.cooler:
+                    await self.controller.set_fan_only_heater(self.zone)
+                else:
+                    await self.controller.set_fan_only(self.zone)
             elif hvac_mode == HVACMode.COOL:
                 # if (
                 #     self.controller.current_state.installed.faoc
@@ -414,6 +425,11 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
+        if self.controller.current_state.runningMode in (
+            MODE_COOLER_FAN,
+            MODE_HEATER_FAN,
+        ):
+            return MANUAL_FAN_SPEEDS
         if self._temperature_units():
             return FAN_SPEEDS
         return MANUAL_FAN_SPEEDS
@@ -424,10 +440,15 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         device = self.controller.active_device(self.zone)
         if not device:
             return None
+        speed = str(device.fan_speed)
+        if self.controller.current_state.runningMode in (
+            MODE_COOLER_FAN,
+            MODE_HEATER_FAN,
+        ):
+            return speed if speed in MANUAL_FAN_SPEEDS else None
         if device.control_mode == CONTROL_MODE_TEMP:
             # running in temperature set point mode
             return FAN_SPEED_BY_TEMP
-        speed = str(device.fan_speed)
         if speed == "0":
             return FAN_SPEED_BY_TEMP if self._temperature_units() else None
         return speed
@@ -468,8 +489,22 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                     await self.controller.set_heating_by_speed(self.zone)
                 else:
                     _LOGGER.warning("Cannot determine active equipment for fan mode %s", fan_mode)
+            elif self.controller.current_state.runningMode in (
+                MODE_COOLER_FAN,
+                MODE_HEATER_FAN,
+            ):
+                await self.controller.set_current_speed(fan_mode, zone=self.zone)
             else:
-                await self.controller.set_current_speed(fan_mode)
+                equipment = self._fan_control_equipment()
+                if equipment == "cooler":
+                    await self.controller.set_cooling_by_speed(self.zone, fan_mode)
+                elif equipment == "heater":
+                    await self.controller.set_heating_by_speed(self.zone, fan_mode)
+                else:
+                    _LOGGER.warning(
+                        "Cannot determine active equipment for fan speed %s",
+                        fan_mode,
+                    )
 
         await self.coordinator.async_request_refresh()
 
