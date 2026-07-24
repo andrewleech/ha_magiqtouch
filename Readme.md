@@ -18,6 +18,18 @@ those capabilities are reported by the controller. If no valid room temperature 
 the climate entity remains available with manual fan control and does not advertise thermostat
 modes.
 
+### Evaporative coolers
+
+For an evaporative-only installation, Home Assistant exposes:
+
+| Home Assistant control | MagIQtouch operation |
+| --- | --- |
+| Cool + target temperature | Evaporative cooling to the selected temperature |
+| Cool + fan speed 1-10 | Evaporative cooling at a fixed fan speed |
+| Fan only + fan speed 1-10 | Outside-air ventilation without evaporative cooling |
+| Off | System off |
+
+Heating is only shown when heater equipment is reported by the controller.
 
 ### HACS
 
