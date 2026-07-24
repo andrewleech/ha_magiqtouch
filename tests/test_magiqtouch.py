@@ -204,6 +204,14 @@ async def test_failed_pre_command_refresh_prevents_stale_command(driver) -> None
     )
 
 
+def test_command_timestamp_uses_remote_millisecond_precision(driver) -> None:
+    driver.current_state.timestamp = 1_784_871_517_437
+
+    command = driver.new_remote_props()
+
+    assert command["params"]["timestamp"] >= 1_000_000_000_000
+
+
 @pytest.mark.asyncio
 async def test_background_refresh_contains_task_failure(driver, caplog) -> None:
     tasks = []

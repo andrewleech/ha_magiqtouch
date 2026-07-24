@@ -439,7 +439,7 @@ class MagIQtouch_Driver:
     def new_remote_props(self, state=None):
         state = state or self.current_state
         now = datetime.utcnow()
-        timestamp = int(now.replace(tzinfo=timezone.utc).timestamp())
+        timestamp = int(now.replace(tzinfo=timezone.utc).timestamp() * 1000)
         state.timestamp = timestamp
 
         data = {
