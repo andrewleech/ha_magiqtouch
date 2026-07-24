@@ -420,8 +420,6 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         if hvac_mode != HVACMode.OFF:
             await self.async_turn_on()
 
-        await self.coordinator.async_request_refresh()
-
     @property
     def fan_modes(self):
         """Return the supported fan modes."""
@@ -505,8 +503,6 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
                         "Cannot determine active equipment for fan speed %s",
                         fan_mode,
                     )
-
-        await self.coordinator.async_request_refresh()
 
     # @property
     # def device_state_attributes(self):

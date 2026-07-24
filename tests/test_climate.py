@@ -292,6 +292,7 @@ async def test_numeric_speed_in_air_only_retains_air_only(make_unit) -> None:
 
     controller.set_current_speed.assert_awaited_once_with("6", zone=entity.zone)
     controller.set_cooling_by_speed.assert_not_called()
+    entity.coordinator.async_request_refresh.assert_not_awaited()
 
 
 def test_air_only_offers_manual_fan_speeds(make_unit) -> None:
@@ -320,3 +321,4 @@ async def test_evap_only_fan_mode_explicitly_selects_fresh_air(make_unit) -> Non
 
     controller.set_fan_only_evap.assert_awaited_once_with(entity.zone)
     controller.set_fan_only_heater.assert_not_called()
+    entity.coordinator.async_request_refresh.assert_not_awaited()
