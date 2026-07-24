@@ -146,5 +146,13 @@ class MagIQtouchCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed("MagIQtouch reauthentication failed") from ex
             try:
                 return await self.controller.refresh_state()
+            except asyncio.TimeoutError as retry_ex:
+                if self.controller.has_confirmed_state:
+                    _LOGGER.warning(
+                        "MagIQtouch cloud sent no state after login; "
+                        "retaining the last controller-confirmed state"
+                    )
+                    return None
+                raise UpdateFailed("MagIQtouch state refresh failed after login") from retry_ex
             except Exception as retry_ex:
                 raise UpdateFailed("MagIQtouch state refresh failed after login") from retry_ex

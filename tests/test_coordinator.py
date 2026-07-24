@@ -60,6 +60,28 @@ async def test_coordinator_raises_update_failed_after_retry() -> None:
 
 
 @pytest.mark.asyncio
+async def test_coordinator_preserves_confirmed_state_after_silent_retry() -> None:
+    controller = SimpleNamespace(
+        refresh_state=AsyncMock(
+            side_effect=[
+                TimeoutError("synthetic first timeout"),
+                TimeoutError("synthetic retry timeout"),
+            ]
+        ),
+        login=AsyncMock(return_value=True),
+        has_confirmed_state=True,
+    )
+    coordinator = object.__new__(MagIQtouchCoordinator)
+    coordinator.controller = controller
+
+    result = await coordinator._async_update_data()
+
+    assert result is None
+    assert controller.refresh_state.await_count == 2
+    controller.login.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_coordinator_raises_update_failed_when_login_fails() -> None:
     first_error = RuntimeError("synthetic first failure")
     controller = SimpleNamespace(

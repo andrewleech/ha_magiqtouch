@@ -112,6 +112,11 @@ class MagIQtouch_Driver:
             _LOGGER.warning(f"Current State: {self.current_state}")
 
     @property
+    def has_confirmed_state(self) -> bool:
+        """Return whether state has been confirmed by the controller this session."""
+        return self._state_confirmed
+
+    @property
     def httpsession(self):
         if self.hass:
             from homeassistant.helpers import aiohttp_client
