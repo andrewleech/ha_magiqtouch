@@ -8,6 +8,13 @@ from unittest.mock import ANY, AsyncMock, Mock
 import aiohttp
 import pytest
 
+from custom_components.magiqtouch.const import (
+    CONTROL_MODE_FAN,
+    CONTROL_MODE_TEMP,
+    MODE_COOLER,
+    MODE_COOLER_FAN,
+    ZONE_COMMON,
+)
 from custom_components.magiqtouch.magiqtouch import MagIQtouch_Driver, WebsocketJob
 
 
@@ -210,3 +217,60 @@ async def test_background_refresh_contains_task_failure(driver, caplog) -> None:
         await tasks[0]
 
     assert "background refresh failed" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_temperature_command_atomically_selects_cooling_and_setpoint(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit(control_mode=CONTROL_MODE_FAN, set_temp=22.0)
+    driver.current_state = make_remote_status(
+        cooler=[cooler],
+        running_mode=MODE_COOLER_FAN,
+    )
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_cooling_by_temperature(ZONE_COMMON, 26)
+
+    assert driver.current_state.systemOn is True
+    assert driver.current_state.runningMode == MODE_COOLER
+    assert cooler.control_mode == CONTROL_MODE_TEMP
+    assert cooler.set_temp == 26
+    driver.send_current_state.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_speed_command_atomically_selects_cooling_and_speed(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=3)
+    driver.current_state = make_remote_status(cooler=[cooler])
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_cooling_by_speed(ZONE_COMMON, 8)
+
+    assert driver.current_state.runningMode == MODE_COOLER
+    assert cooler.control_mode == CONTROL_MODE_FAN
+    assert cooler.fan_speed == 8
+    driver.send_current_state.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_air_only_speed_change_only_updates_active_cooler(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit(fan_speed=3)
+    heater = make_unit(name="Heater", fan_speed=4)
+    driver.current_state = make_remote_status(
+        cooler=[cooler],
+        heater=[heater],
+        running_mode=MODE_COOLER_FAN,
+    )
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_current_speed(7, ZONE_COMMON)
+
+    assert driver.current_state.runningMode == MODE_COOLER_FAN
+    assert cooler.fan_speed == 7
+    assert heater.fan_speed == 4
+    driver.send_current_state.assert_awaited_once()

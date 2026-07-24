@@ -640,15 +640,19 @@ class MagIQtouch_Driver:
         )
         await self.send_current_state(checker)
 
-    async def set_heating_by_temperature(self, zone=ZONE_NONE):
+    async def set_heating_by_temperature(self, zone=ZONE_NONE, temperature=None):
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_TEMP
-        await self.set_heating()
+            if temperature is not None:
+                heater.set_temp = round(float(temperature))
+        await self.set_heating(zone)
 
-    async def set_heating_by_speed(self, zone=ZONE_NONE):
+    async def set_heating_by_speed(self, zone=ZONE_NONE, speed=None):
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_FAN
-        await self.set_heating()
+            if speed is not None:
+                heater.fan_speed = int(speed)
+        await self.set_heating(zone)
 
     async def set_heating(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
@@ -663,15 +667,19 @@ class MagIQtouch_Driver:
 
         await self.send_current_state(checker)
 
-    async def set_cooling_by_temperature(self, zone=ZONE_NONE):
+    async def set_cooling_by_temperature(self, zone=ZONE_NONE, temperature=None):
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_TEMP
-        await self.set_cooling()
+            if temperature is not None:
+                cooler.set_temp = round(float(temperature))
+        await self.set_cooling(zone)
 
-    async def set_cooling_by_speed(self, zone=ZONE_NONE):
+    async def set_cooling_by_speed(self, zone=ZONE_NONE, speed=None):
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_FAN
-        await self.set_cooling()
+            if speed is not None:
+                cooler.fan_speed = int(speed)
+        await self.set_cooling(zone)
 
     async def set_cooling(self, zone=ZONE_NONE):
         self.current_state.systemOn = True
@@ -714,11 +722,23 @@ class MagIQtouch_Driver:
 
     async def set_current_speed(self, speed, zone=ZONE_NONE):
         speed = int(speed)
-        for unit in chain(self.current_state.cooler, self.current_state.heater):
+        running_mode = self.current_state.runningMode
+        if running_mode in (MODE_COOLER, MODE_COOLER_FAN):
+            units = self.available_coolers(zone)
+            unit_type = "c"
+        elif running_mode in (MODE_HEATER, MODE_HEATER_FAN):
+            units = self.available_heaters(zone)
+            unit_type = "h"
+        else:
+            raise ValueError(f"fan speed unavailable in mode: {running_mode}")
+        for unit in units:
             unit.fan_speed = speed
-        # checker = lambda state: self.active_device(zone, state).fan_speed == speed
         checker = partial(
-            self.state_checker, units="hc", zone=None, field="fan_speed", value=speed
+            self.state_checker,
+            units=unit_type,
+            zone=zone,
+            field="fan_speed",
+            value=speed,
         )
         await self.send_current_state(checker)
 
