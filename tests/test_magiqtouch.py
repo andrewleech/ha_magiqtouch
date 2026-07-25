@@ -13,7 +13,9 @@ from custom_components.magiqtouch.const import (
     CONTROL_MODE_TEMP,
     MODE_COOLER,
     MODE_COOLER_FAN,
+    MODE_HEATER,
     ZONE_COMMON,
+    ZoneType,
 )
 from custom_components.magiqtouch.magiqtouch import MagIQtouch_Driver, WebsocketJob
 
@@ -68,6 +70,7 @@ class FakeSession:
 def driver() -> MagIQtouch_Driver:
     test_driver = MagIQtouch_Driver("test@example.invalid", "not-a-real-password")
     test_driver._refresh_msg = "refresh"
+    test_driver._state_confirmed = True
     return test_driver
 
 
@@ -204,6 +207,124 @@ async def test_failed_pre_command_refresh_prevents_stale_command(driver) -> None
     )
 
 
+@pytest.mark.asyncio
+async def test_pre_command_refresh_preserves_requested_payload(
+    driver, make_unit, make_remote_status
+) -> None:
+    driver._state_confirmed = False
+    driver.current_state = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=1)]
+    )
+    refreshed_state = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=1)]
+    )
+    sent_commands = []
+
+    async def ws_send(message, checker, timeout=8):
+        if message == driver._refresh_msg:
+            driver.process_new_state(refreshed_state)
+        else:
+            sent_commands.append(json.loads(message))
+        return True
+
+    driver.ws_send = AsyncMock(side_effect=ws_send)
+
+    await driver.set_cooling_by_speed(ZONE_COMMON, 8)
+
+    assert sent_commands[0]["params"]["cooler"][0]["control_mode"] == CONTROL_MODE_FAN
+    assert sent_commands[0]["params"]["cooler"][0]["fan_speed"] == 8
+
+
+def test_state_checker_rejects_missing_zone(driver, make_unit, make_remote_status) -> None:
+    state = make_remote_status(cooler=[make_unit()])
+    missing_zone = ZoneType("INDIVIDUAL", "Bedroom")
+
+    assert (
+        driver.state_checker(
+            state,
+            units="c",
+            zone=missing_zone,
+            field="fan_speed",
+            value=5,
+        )
+        is False
+    )
+
+
+def test_state_checker_rejects_missing_equipment(driver, make_remote_status) -> None:
+    state = make_remote_status(cooler=[])
+
+    assert (
+        driver.state_checker(
+            state,
+            units="c",
+            zone=ZONE_COMMON,
+            field="fan_speed",
+            value=5,
+        )
+        is False
+    )
+
+
+def test_state_checker_does_not_mutate_response_equipment_lists(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit()
+    heater = make_unit()
+    state = make_remote_status(cooler=[cooler], heater=[heater])
+
+    assert driver.state_checker(
+        state,
+        units="hc",
+        zone=ZONE_COMMON,
+        field="fan_speed",
+        value=5,
+    )
+    assert state.cooler == [cooler]
+    assert state.heater == [heater]
+
+
+def test_process_new_state_invalidates_detached_equipment_cache(
+    driver, make_unit, make_remote_status
+) -> None:
+    driver.current_state = make_remote_status(cooler=[make_unit(name="Cached")])
+    cached_unit = driver.available_coolers(ZONE_COMMON)[0]
+    refreshed_unit = make_unit(name="Controller")
+
+    driver.process_new_state(make_remote_status(cooler=[refreshed_unit]))
+
+    assert driver.available_coolers(ZONE_COMMON) == [driver.current_state.cooler[0]]
+    assert driver.available_coolers(ZONE_COMMON)[0] is not cached_unit
+
+
+@pytest.mark.asyncio
+async def test_generic_fan_only_refreshes_before_selecting_equipment(
+    driver, make_unit, make_remote_status
+) -> None:
+    driver.current_state = make_remote_status(
+        cooler=[make_unit()],
+        heater=[make_unit(name="Heater")],
+        running_mode=MODE_COOLER,
+    )
+    live_state = make_remote_status(
+        cooler=[make_unit()],
+        heater=[make_unit(name="Heater")],
+        running_mode=MODE_HEATER,
+    )
+
+    async def ensure_state_confirmed():
+        driver.process_new_state(live_state)
+
+    driver.ensure_state_confirmed = AsyncMock(side_effect=ensure_state_confirmed)
+    driver.set_fan_only_evap = AsyncMock()
+    driver.set_fan_only_heater = AsyncMock()
+
+    await driver.set_fan_only(ZONE_COMMON)
+
+    driver.set_fan_only_heater.assert_awaited_once_with(ZONE_COMMON)
+    driver.set_fan_only_evap.assert_not_awaited()
+
+
 def test_command_timestamp_uses_remote_millisecond_precision(driver) -> None:
     driver.current_state.timestamp = 1_784_871_517_437
 
@@ -261,6 +382,79 @@ async def test_speed_command_atomically_selects_cooling_and_speed(
     assert cooler.control_mode == CONTROL_MODE_FAN
     assert cooler.fan_speed == 8
     driver.send_current_state.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_speed_command_requires_controller_to_confirm_nested_speed(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=3)
+    driver.current_state = make_remote_status(cooler=[cooler])
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_cooling_by_speed(ZONE_COMMON, 8)
+
+    checker = driver.send_current_state.await_args.args[0]
+    unconfirmed = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_FAN, fan_speed=3)]
+    )
+    wrong_control_mode = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=8)]
+    )
+    confirmed = make_remote_status(cooler=[make_unit(control_mode=CONTROL_MODE_FAN, fan_speed=8)])
+    assert checker(unconfirmed) is False
+    assert checker(wrong_control_mode) is False
+    assert checker(confirmed) is True
+
+
+@pytest.mark.asyncio
+async def test_temperature_command_requires_controller_to_confirm_nested_setpoint(
+    driver, make_unit, make_remote_status
+) -> None:
+    cooler = make_unit(control_mode=CONTROL_MODE_FAN, set_temp=22.0)
+    driver.current_state = make_remote_status(cooler=[cooler])
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_cooling_by_temperature(ZONE_COMMON, 26)
+
+    checker = driver.send_current_state.await_args.args[0]
+    unconfirmed = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, set_temp=22.0)]
+    )
+    wrong_control_mode = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_FAN, set_temp=26.0)]
+    )
+    confirmed = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, set_temp=26.0)]
+    )
+    assert checker(unconfirmed) is False
+    assert checker(wrong_control_mode) is False
+    assert checker(confirmed) is True
+
+
+@pytest.mark.asyncio
+async def test_fresh_air_command_requires_controller_to_confirm_returned_mode(
+    driver, make_unit, make_remote_status
+) -> None:
+    driver.current_state = make_remote_status(
+        cooler=[make_unit()],
+        running_mode=MODE_COOLER,
+    )
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_fan_only_evap(ZONE_COMMON)
+
+    checker = driver.send_current_state.await_args.args[0]
+    wrong_mode = make_remote_status(
+        cooler=[make_unit()],
+        running_mode=MODE_COOLER,
+    )
+    confirmed = make_remote_status(
+        cooler=[make_unit()],
+        running_mode=MODE_COOLER_FAN,
+    )
+    assert checker(wrong_mode) is False
+    assert checker(confirmed) is True
 
 
 @pytest.mark.asyncio

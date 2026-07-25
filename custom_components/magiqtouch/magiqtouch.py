@@ -435,6 +435,8 @@ class MagIQtouch_Driver:
             _LOGGER.warning(f"Current State: {new_state}")
 
         self.current_state.update(new_state)
+        self._zone_coolers.clear()
+        self._zone_heaters.clear()
         self._state_confirmed = True
 
         if self._update_listener:
@@ -455,26 +457,23 @@ class MagIQtouch_Driver:
 
     @staticmethod
     def state_checker(state, units, zone, field, value):
-        check = state.cooler if "c" in units else []
+        check = []
+        if "c" in units:
+            check.extend(state.cooler)
         if "h" in units:
             check.extend(state.heater)
-        if not check:
-            if getattr(state, field) != value:
-                return False
-        for u in check:
-            if not MagIQtouch_Driver.zone_match(u, zone):
-                continue
-            if getattr(u, field) != value:
-                return False
-        return True
+        matching = [unit for unit in check if MagIQtouch_Driver.zone_match(unit, zone)]
+        return bool(matching) and all(getattr(unit, field) == value for unit in matching)
+
+    async def ensure_state_confirmed(self):
+        if self._state_confirmed:
+            return
+        _LOGGER.info("refreshing state from device before first command")
+        if not await self.ws_send(self._refresh_msg, lambda state: True, timeout=5):
+            raise asyncio.TimeoutError("Could not confirm state before command")
 
     async def send_current_state(self, checker, data=None):
-        if not self._state_confirmed:
-            # State was loaded from cache and hasn't been confirmed from the
-            # device yet. Refresh first to avoid sending stale zone/mode data.
-            _LOGGER.info("refreshing state from device before first command")
-            if not await self.ws_send(self._refresh_msg, lambda s: True, timeout=5):
-                raise asyncio.TimeoutError("Could not confirm state before command")
+        await self.ensure_state_confirmed()
 
         ts = self.current_state.timestamp
         data = data or self.new_remote_props()
@@ -575,11 +574,13 @@ class MagIQtouch_Driver:
             return UnitOfTemperature.FAHRENHEIT
 
     async def set_off(self):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = False
         checker = lambda state: not state.systemOn
         await self.send_current_state(checker)
 
     async def set_on(self):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = True
         checker = lambda state: bool(state.systemOn)
         await self.send_current_state(checker)
@@ -591,6 +592,7 @@ class MagIQtouch_Driver:
 
     async def set_zone_onoff(self, zone, is_on):
         """Turns a specific zone on and off."""
+        await self.ensure_state_confirmed()
         if zone and zone in (ZONE_COMMON, ZONE_NONE):
             on_state = None
             return
@@ -614,6 +616,7 @@ class MagIQtouch_Driver:
         await self.send_current_state(checker)
 
     async def set_fan_only(self, zone=ZONE_NONE):
+        await self.ensure_state_confirmed()
         runningMode = self.current_state.runningMode
         if runningMode in (MODE_COOLER, MODE_COOLER_FAN):
             await self.set_fan_only_evap(zone)
@@ -628,38 +631,43 @@ class MagIQtouch_Driver:
             device.zoneRunningState = "NOT_REQUIRED"
 
     async def set_fan_only_evap(self, zone=ZONE_NONE):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_COOLER_FAN
         self._reset_device_state(zone)
-        checker = lambda state: (
-            state.systemOn and self.current_state.runningMode == MODE_COOLER_FAN
-        )
+        checker = lambda state: state.systemOn and state.runningMode == MODE_COOLER_FAN
         await self.send_current_state(checker)
 
     async def set_fan_only_heater(self, zone=ZONE_NONE):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_HEATER_FAN
         self._reset_device_state(zone)
-        checker = lambda state: (
-            state.systemOn and self.current_state.runningMode == MODE_HEATER_FAN
-        )
+        checker = lambda state: state.systemOn and state.runningMode == MODE_HEATER_FAN
         await self.send_current_state(checker)
 
     async def set_heating_by_temperature(self, zone=ZONE_NONE, temperature=None):
+        await self.ensure_state_confirmed()
+        expected = {"control_mode": CONTROL_MODE_TEMP}
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_TEMP
             if temperature is not None:
                 heater.set_temp = round(float(temperature))
-        await self.set_heating(zone)
+                expected["set_temp"] = heater.set_temp
+        await self.set_heating(zone, expected)
 
     async def set_heating_by_speed(self, zone=ZONE_NONE, speed=None):
+        await self.ensure_state_confirmed()
+        expected = {"control_mode": CONTROL_MODE_FAN}
         for heater in self.available_heaters(zone):
             heater.control_mode = CONTROL_MODE_FAN
             if speed is not None:
                 heater.fan_speed = int(speed)
-        await self.set_heating(zone)
+                expected["fan_speed"] = heater.fan_speed
+        await self.set_heating(zone, expected)
 
-    async def set_heating(self, zone=ZONE_NONE):
+    async def set_heating(self, zone=ZONE_NONE, expected=None):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_HEATER
         self._reset_device_state(zone)
@@ -668,25 +676,45 @@ class MagIQtouch_Driver:
             heater.zoneRunningState = "REQUIRED_RUNNING"
 
         def checker(state):
-            return state.systemOn and state.runningMode == MODE_HEATER
+            return (
+                state.systemOn
+                and state.runningMode == MODE_HEATER
+                and all(
+                    self.state_checker(
+                        state,
+                        units="h",
+                        zone=zone,
+                        field=field,
+                        value=value,
+                    )
+                    for field, value in (expected or {}).items()
+                )
+            )
 
         await self.send_current_state(checker)
 
     async def set_cooling_by_temperature(self, zone=ZONE_NONE, temperature=None):
+        await self.ensure_state_confirmed()
+        expected = {"control_mode": CONTROL_MODE_TEMP}
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_TEMP
             if temperature is not None:
                 cooler.set_temp = round(float(temperature))
-        await self.set_cooling(zone)
+                expected["set_temp"] = cooler.set_temp
+        await self.set_cooling(zone, expected)
 
     async def set_cooling_by_speed(self, zone=ZONE_NONE, speed=None):
+        await self.ensure_state_confirmed()
+        expected = {"control_mode": CONTROL_MODE_FAN}
         for cooler in self.available_coolers(zone):
             cooler.control_mode = CONTROL_MODE_FAN
             if speed is not None:
                 cooler.fan_speed = int(speed)
-        await self.set_cooling(zone)
+                expected["fan_speed"] = cooler.fan_speed
+        await self.set_cooling(zone, expected)
 
-    async def set_cooling(self, zone=ZONE_NONE):
+    async def set_cooling(self, zone=ZONE_NONE, expected=None):
+        await self.ensure_state_confirmed()
         self.current_state.systemOn = True
         self.current_state.runningMode = MODE_COOLER
         self._reset_device_state(zone)
@@ -695,7 +723,20 @@ class MagIQtouch_Driver:
             cooler.zoneRunningState = "REQUIRED_RUNNING"
 
         def checker(state):
-            return state.systemOn and state.runningMode == MODE_COOLER
+            return (
+                state.systemOn
+                and state.runningMode == MODE_COOLER
+                and all(
+                    self.state_checker(
+                        state,
+                        units="c",
+                        zone=zone,
+                        field=field,
+                        value=value,
+                    )
+                    for field, value in (expected or {}).items()
+                )
+            )
 
         await self.send_current_state(checker)
 
@@ -726,6 +767,7 @@ class MagIQtouch_Driver:
     #     await self.send_current_state(checker)
 
     async def set_current_speed(self, speed, zone=ZONE_NONE):
+        await self.ensure_state_confirmed()
         speed = int(speed)
         running_mode = self.current_state.runningMode
         if running_mode in (MODE_COOLER, MODE_COOLER_FAN):
@@ -748,6 +790,7 @@ class MagIQtouch_Driver:
         await self.send_current_state(checker)
 
     async def set_temperature(self, new_temp, zone=ZONE_NONE):
+        await self.ensure_state_confirmed()
         new_temp = round(new_temp)
         if device := self.active_device(zone):
             device.set_temp = new_temp
