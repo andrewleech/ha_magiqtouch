@@ -381,6 +381,7 @@ async def test_speed_command_atomically_selects_cooling_and_speed(
     assert driver.current_state.runningMode == MODE_COOLER
     assert cooler.control_mode == CONTROL_MODE_FAN
     assert cooler.fan_speed == 8
+    assert driver.current_state.fan.cooler_Fan_Speed == 8
     driver.send_current_state.assert_awaited_once()
 
 
@@ -401,9 +402,15 @@ async def test_speed_command_requires_controller_to_confirm_nested_speed(
     wrong_control_mode = make_remote_status(
         cooler=[make_unit(control_mode=CONTROL_MODE_TEMP, fan_speed=8)]
     )
+    wrong_global_speed = make_remote_status(
+        cooler=[make_unit(control_mode=CONTROL_MODE_FAN, fan_speed=8)]
+    )
+    wrong_global_speed.fan.cooler_Fan_Speed = 1
     confirmed = make_remote_status(cooler=[make_unit(control_mode=CONTROL_MODE_FAN, fan_speed=8)])
+    confirmed.fan.cooler_Fan_Speed = 8
     assert checker(unconfirmed) is False
     assert checker(wrong_control_mode) is False
+    assert checker(wrong_global_speed) is False
     assert checker(confirmed) is True
 
 
@@ -474,5 +481,37 @@ async def test_air_only_speed_change_only_updates_active_cooler(
 
     assert driver.current_state.runningMode == MODE_COOLER_FAN
     assert cooler.fan_speed == 7
+    assert driver.current_state.fan.cooler_Fan_Speed == 7
     assert heater.fan_speed == 4
     driver.send_current_state.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_heater_speed_updates_and_confirms_global_fan_speed(
+    driver, make_unit, make_remote_status
+) -> None:
+    heater = make_unit(name="Heater", control_mode=CONTROL_MODE_TEMP, fan_speed=3)
+    driver.current_state = make_remote_status(
+        heater=[heater],
+        running_mode=MODE_HEATER,
+    )
+    driver.send_current_state = AsyncMock()
+
+    await driver.set_heating_by_speed(ZONE_COMMON, 6)
+
+    checker = driver.send_current_state.await_args.args[0]
+    wrong_global_speed = make_remote_status(
+        heater=[make_unit(name="Heater", control_mode=CONTROL_MODE_FAN, fan_speed=6)],
+        running_mode=MODE_HEATER,
+    )
+    wrong_global_speed.fan.heater_Fan_Speed = 1
+    confirmed = make_remote_status(
+        heater=[make_unit(name="Heater", control_mode=CONTROL_MODE_FAN, fan_speed=6)],
+        running_mode=MODE_HEATER,
+    )
+    confirmed.fan.heater_Fan_Speed = 6
+
+    assert heater.fan_speed == 6
+    assert driver.current_state.fan.heater_Fan_Speed == 6
+    assert checker(wrong_global_speed) is False
+    assert checker(confirmed) is True

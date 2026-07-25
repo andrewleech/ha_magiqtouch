@@ -664,6 +664,8 @@ class MagIQtouch_Driver:
             if speed is not None:
                 heater.fan_speed = int(speed)
                 expected["fan_speed"] = heater.fan_speed
+        if speed is not None:
+            self.current_state.fan.heater_Fan_Speed = int(speed)
         await self.set_heating(zone, expected)
 
     async def set_heating(self, zone=ZONE_NONE, expected=None):
@@ -676,9 +678,13 @@ class MagIQtouch_Driver:
             heater.zoneRunningState = "REQUIRED_RUNNING"
 
         def checker(state):
+            expected_fan_speed = (expected or {}).get("fan_speed")
             return (
                 state.systemOn
                 and state.runningMode == MODE_HEATER
+                and (
+                    expected_fan_speed is None or state.fan.heater_Fan_Speed == expected_fan_speed
+                )
                 and all(
                     self.state_checker(
                         state,
@@ -711,6 +717,8 @@ class MagIQtouch_Driver:
             if speed is not None:
                 cooler.fan_speed = int(speed)
                 expected["fan_speed"] = cooler.fan_speed
+        if speed is not None:
+            self.current_state.fan.cooler_Fan_Speed = int(speed)
         await self.set_cooling(zone, expected)
 
     async def set_cooling(self, zone=ZONE_NONE, expected=None):
@@ -723,9 +731,13 @@ class MagIQtouch_Driver:
             cooler.zoneRunningState = "REQUIRED_RUNNING"
 
         def checker(state):
+            expected_fan_speed = (expected or {}).get("fan_speed")
             return (
                 state.systemOn
                 and state.runningMode == MODE_COOLER
+                and (
+                    expected_fan_speed is None or state.fan.cooler_Fan_Speed == expected_fan_speed
+                )
                 and all(
                     self.state_checker(
                         state,
@@ -773,20 +785,29 @@ class MagIQtouch_Driver:
         if running_mode in (MODE_COOLER, MODE_COOLER_FAN):
             units = self.available_coolers(zone)
             unit_type = "c"
+            fan_field = "cooler_Fan_Speed"
         elif running_mode in (MODE_HEATER, MODE_HEATER_FAN):
             units = self.available_heaters(zone)
             unit_type = "h"
+            fan_field = "heater_Fan_Speed"
         else:
             raise ValueError(f"fan speed unavailable in mode: {running_mode}")
         for unit in units:
             unit.fan_speed = speed
-        checker = partial(
-            self.state_checker,
-            units=unit_type,
-            zone=zone,
-            field="fan_speed",
-            value=speed,
-        )
+        setattr(self.current_state.fan, fan_field, speed)
+
+        def checker(state):
+            return (
+                self.state_checker(
+                    state,
+                    units=unit_type,
+                    zone=zone,
+                    field="fan_speed",
+                    value=speed,
+                )
+                and getattr(state.fan, fan_field) == speed
+            )
+
         await self.send_current_state(checker)
 
     async def set_temperature(self, new_temp, zone=ZONE_NONE):
