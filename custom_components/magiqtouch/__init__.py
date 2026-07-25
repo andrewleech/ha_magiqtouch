@@ -1,4 +1,5 @@
 """The Seeley MagIQtouch integration."""
+
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 from .magiqtouch import MagIQtouch_Driver
 from .const import (
@@ -140,4 +142,17 @@ class MagIQtouchCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(
                 "Updating the state failed, will retry with login: %s(%s)" % (type(ex), ex)
             )
-            await self.controller.login()
+            if not await self.controller.login():
+                raise UpdateFailed("MagIQtouch reauthentication failed") from ex
+            try:
+                return await self.controller.refresh_state()
+            except asyncio.TimeoutError as retry_ex:
+                if self.controller.has_confirmed_state:
+                    _LOGGER.warning(
+                        "MagIQtouch cloud sent no state after login; "
+                        "retaining the last controller-confirmed state"
+                    )
+                    return None
+                raise UpdateFailed("MagIQtouch state refresh failed after login") from retry_ex
+            except Exception as retry_ex:
+                raise UpdateFailed("MagIQtouch state refresh failed after login") from retry_ex

@@ -12,8 +12,14 @@ dependencies = [
 "async-timeout",
 "homeassistant==2024.2.5",
 ]
-#[project.dev-dependencies]
-#homeassistant = "^2022.8.6"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.1.2",
+]
+
 [tool.setuptools.packages.find]
 where = [
     "custom_components"
@@ -36,16 +42,6 @@ module = [
 disable_error_code = "assignment"
 
 [tool.ruff]
-# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
-select = ["E", "F"]
-ignore = [
-    "E402",  # Module level import not at top of file
-    "E722",  # don't use bare except
-    "E731",  # do not assign a `lambda` expression"
-]
-# Allow autofix for all enabled rules (when `--fix`) is provided.
-fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
-unfixable = []
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".ruff_cache",
@@ -57,5 +53,21 @@ exclude = [
 # Same as our configuration of Black.
 line-length = 99
 
+[tool.ruff.lint]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+select = ["E", "F"]
+ignore = [
+    "E402",  # Module level import not at top of file
+    "E722",  # don't use bare except
+    "E731",  # do not assign a `lambda` expression"
+]
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
+unfixable = []
+
 [tool.ruff.format]
 exclude = ["custom_components/magiqtouch/vendor"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

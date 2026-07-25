@@ -9,18 +9,20 @@ _LOGGER = logging.getLogger("magiqtouch")
 
 def dataclass_from_dict(klass, d, show_errors=False):
     # https://stackoverflow.com/a/54769644
-    try:
-        fieldtypes = {f.name: f.type for f in dataclasses.fields(klass)}
-        return klass(**{f: dataclass_from_dict(fieldtypes[f], d[f]) for f in d})
-    except KeyError:
-        raise
-    except:
-        # if type(klass) == Optional:
-        # print(klass, type(klass), klass.__dict__)
-        if show_errors or (isinstance(d, dict) and "MacAddressId" in d):
-            print(klass, d)
-            raise
-        return d  # Not a dataclass fieldtypes
+    if not is_dataclass(klass):
+        return d
+    if isinstance(d, klass):
+        return d
+    if not isinstance(d, dict):
+        raise TypeError(f"Expected a mapping for {klass.__name__}, got {type(d).__name__}")
+
+    fieldtypes = {f.name: f.type for f in dataclasses.fields(klass)}
+    values = {
+        name: dataclass_from_dict(fieldtypes[name], value, show_errors)
+        for name, value in d.items()
+        if name in fieldtypes
+    }
+    return klass(**values)
 
 
 def flatten_dict(data, sep="_", parent_key="", result=None):
@@ -440,6 +442,20 @@ class RemoteStatus:
     touchCount: int = 0
     installed: Installed = field(default_factory=Installed)
 
+    @staticmethod
+    def _reconcile_units(current: list[UnitDetails], new: list[UnitDetails]) -> None:
+        existing = {(unit.zoneType, unit.name): unit for unit in current}
+        reconciled = []
+        for unit in new:
+            key = (unit.zoneType, unit.name)
+            if matching := existing.get(key):
+                for unit_field in fields(UnitDetails):
+                    setattr(matching, unit_field.name, getattr(unit, unit_field.name))
+                reconciled.append(matching)
+            else:
+                reconciled.append(unit)
+        current[:] = reconciled
+
     def update(self, other: "RemoteStatus"):
         for fld in fields(RemoteStatus):
             current = getattr(self, fld.name)
@@ -448,15 +464,7 @@ class RemoteStatus:
                 for k, v in new.__dict__.items():
                     setattr(current, k, v)
             elif fld.name in ("cooler", "heater"):
-                if not current:
-                    current.extend(new)
-                    continue
-                for i, unit in enumerate(new):
-                    cu = current[i]
-                    if cu.zoneType != unit.zoneType or cu.name != unit.name:
-                        raise ValueError(f"units out of order\n{self}\n{other}")
-                    for k, v in dataclasses.asdict(unit).items():
-                        setattr(current[i], k, v)
+                self._reconcile_units(current, new)
             else:
                 setattr(self, fld.name, new)
 
@@ -470,8 +478,8 @@ class RemoteStatus:
     @classmethod
     def from_dict(cls, data):
         dc = dataclass_from_dict(cls, data)
-        dc.cooler = [UnitDetails(**c) for c in dc.cooler]
-        dc.heater = [UnitDetails(**h) for h in dc.heater]
+        dc.cooler = [dataclass_from_dict(UnitDetails, c) for c in dc.cooler]
+        dc.heater = [dataclass_from_dict(UnitDetails, h) for h in dc.heater]
         return dc
 
     def __eq__(self, other):
